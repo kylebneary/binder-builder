@@ -1,14 +1,17 @@
 """Typer CLI. Every optimizer/ingest capability must be reachable here without the UI."""
 
 from datetime import date
+from pathlib import Path
 
 import typer
 from rich.console import Console
 
+from app.config import get_settings
 from app.db import SessionLocal
 from app.ingest.cards import ingest_sets_and_cards
 from app.ingest.pokemontcg import PokemonTcgCardSource
 from app.ingest.prices import ingest_group_prices, resolve_group_set_pairs
+from app.ingest.set_mapping import load_set_map, sync_set_map_to_db
 from app.ingest.tcgcsv import TcgCsvPriceSource
 
 app = typer.Typer(help="binder-builder")
@@ -123,6 +126,38 @@ def ingest_prices(
             )
     if failed:
         raise typer.Exit(code=1)
+
+
+@sync_app.command("setmap")
+def sync_setmap(
+    path: str | None = typer.Option(
+        None, "--path", help="Path to the set map YAML (default: data/set_map.yaml)."
+    ),
+) -> None:
+    """Load data/set_map.yaml into Set.tcgplayer_group_id. Idempotent; the YAML is the source
+    of truth (see scripts/build_set_map.py to seed/extend it)."""
+    map_path = Path(path) if path else get_settings().set_map_path
+    mapping = load_set_map(map_path)
+    if not mapping:
+        console.print(f"[yellow]{map_path} is empty or missing -- nothing to sync.[/yellow]")
+        return
+
+    db = SessionLocal()
+    try:
+        results = sync_set_map_to_db(db, mapping)
+    finally:
+        db.close()
+
+    missing = [r for r in results if r.status == "no_set_row"]
+    for r in results:
+        if r.status != "no_set_row":
+            console.print(f"{r.ptcg_set_id}: group {r.tcgplayer_group_id} ({r.status})")
+    if missing:
+        ids = ", ".join(r.ptcg_set_id for r in missing)
+        console.print(
+            f"[yellow]{len(missing)} set(s) in {map_path} have no Set row yet -- run "
+            f"`bb ingest cards --set <id>` first: {ids}[/yellow]"
+        )
 
 
 @sync_app.command("pullrates")

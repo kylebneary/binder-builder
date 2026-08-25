@@ -1,0 +1,5 @@
+# ptcg_set_id -> tcgcsv groupId. Seeded by scripts/build_set_map.py (fuzzy match on name
+# + release date); this file is the source of truth from there -- hand-correct entries
+# here directly, re-running the script only ever adds new keys, never overwrites existing
+# ones. `bb sync setmap` loads this into Set.tcgplayer_group_id.
+sv8: 23651
