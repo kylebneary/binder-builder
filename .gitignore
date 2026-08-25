@@ -15,6 +15,7 @@ htmlcov/
 data/cache/
 data/raw/
 data/images/
+data/pokemon_cards*.csv
 
 node_modules/
 dist/

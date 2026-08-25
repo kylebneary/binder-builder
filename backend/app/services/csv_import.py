@@ -36,7 +36,7 @@ log = logging.getLogger(__name__)
 HEADER_ALIASES: dict[str, list[str]] = {
     "set": ["set", "set name", "expansion", "edition"],
     "set_code": ["set code", "set abbreviation", "edition code", "ptcgo code"],
-    "number": ["number", "card number", "collector number", "#", "no.", "card #"],
+    "number": ["number", "card number", "collector number", "#", "no.", "card #", "card num"],
     "name": ["name", "card name", "card"],
     "printing": ["printing", "foil", "variant", "treatment", "finish", "rarity variant"],
     "condition": ["condition", "card condition"],
@@ -46,6 +46,25 @@ HEADER_ALIASES: dict[str, list[str]] = {
     "language": ["language", "lang"],
     "grade": ["grade"],
     "grader": ["grader", "grading company"],
+}
+
+# Set names as they commonly appear in third-party collection spreadsheets/exports, mapped to
+# the canonical `set.name` this project ingests from pokemontcg.io. Discovered empirically against
+# a real user export (see data/pokemon_cards.csv) -- not exhaustive, extend as new mismatches show
+# up. Keys and values are compared case-insensitively.
+SET_NAME_ALIASES: dict[str, str] = {
+    "base set": "base",
+    "sword and shield": "sword & shield",
+    "sword and shield promos": "swsh black star promos",
+    "pokemon go": "pokémon go",
+    "guardian's rising": "guardians rising",
+    "dragons exhaulted": "dragons exalted",
+    "undaunted": "hs—undaunted",
+    "brilliant stars (trainer gallery)": "brilliant stars trainer gallery",
+    "lost origin (trainer gallery)": "lost origin trainer gallery",
+    "silver tempest (trainer gallery)": "silver tempest trainer gallery",
+    "crown zenith (galarian gallery)": "crown zenith galarian gallery",
+    "celebrations classic collection": "celebrations: classic collection",
 }
 
 PRINTING_ALIASES: dict[str, Variant] = {
@@ -173,6 +192,7 @@ def _resolve_set(db: Session, row: ParsedRow) -> Set | list[str] | None:
     if not row.set_name:
         return None
     target = row.set_name.strip().lower()
+    target = SET_NAME_ALIASES.get(target, target)
     all_sets = db.execute(select(Set)).scalars().all()
     exact = [s for s in all_sets if s.name.strip().lower() == target]
     if len(exact) == 1:
