@@ -66,15 +66,29 @@ matches a spot-check against TCGplayer within a few percent.
 - [x] 1.14 Sealed product catalogue: classify tcgcsv products as sealed, curate
       `data/sealed_map.yaml` for `product_type` and `packs_per_unit`.
 
-**Outstanding before Phase 1's exit criterion is *really* met:** `pokemontcg.io` was down for both
-sessions that built this phase, so nothing here has run against a full, real card database yet --
-`data/set_map.yaml` has exactly one hand-verified entry (`sv8`), and the tracker has only ever been
-exercised against fixtures or a hand-seeded demo DB. Before starting Phase 2, run for real:
-`bb ingest cards --all`, `python scripts/build_set_map.py` (review its unmatched-set report and
-hand-correct), `bb sync setmap`, `bb ingest prices --set <your sets>`, `bb sync sealedmap` (review
-its unmatched-product report), then actually enter a real collection via the bulk-entry UI and
-spot-check the portfolio value against TCGplayer. That's the real Phase 1 exit check -- everything
-above passing tests is necessary but not sufficient for it.
+**Real-data run (2026-08-25):** `bb ingest cards --all` / `build_set_map.py` / `bb sync setmap` /
+`bb ingest prices` / `bb sync sealedmap` have now all been run for real against live pokemontcg.io
+and tcgcsv data, not just fixtures. Results:
+
+- **166 of 174 ptcg sets ingested.** The other 8 -- `smp`, `sv1`, `sv10`, `sve`, `swsh7`, `xy3`,
+  `xy4`, `xyp` -- failed pokemontcg.io across four escalating retry passes (1s/3s/5s/20s backoff),
+  a harder failure than this API's usual occasional-outage flakiness. `scripts/import_offline_cards.py`
+  (+ `app/ingest/pokemontcg_offline.py`) exists as a manual fallback: hand-download the same JSON
+  the CLI would fetch and import it from disk. At some point, worth looking into an alternative
+  source for these 8 (e.g. the `PokemonTCG/pokemon-tcg-data` GitHub mirror) instead of continuing
+  to retry the same flaky endpoint.
+- `data/set_map.yaml`: 173 entries. Two set pairs -- `tk1a`/`tk1b` and `tk2a`/`tk2b` (the old EX
+  Trainer Kit half-decks) -- can never be mapped: tcgcsv sells each pair as one combined product
+  with overlapping card numbers between the two decks, and `Set.tcgplayer_group_id` is unique per
+  set. Documented inline in the YAML.
+- `data/sealed_map.yaml`: 517 of ~2,927 sealed products classified via name patterns unambiguous
+  enough to apply mechanically (spot-checked for false positives first). The remaining ~2,400 are
+  real hand-curation work -- pack counts for ETBs, checklane blisters, "Case" variants, etc. can't
+  be inferred from the name alone, by design (see the file's own header comment).
+
+Collection-entry spot-check against real TCGplayer prices (enter a real collection via the
+bulk-entry UI, compare portfolio value) still hasn't happened -- that's the remaining piece before
+Phase 1's exit criterion is *really* met, independent of the sealed-map curation above.
 
 ## Phase 2 — Completion optimizer
 
