@@ -1,0 +1,73 @@
+# Battle Styles (swsh5) - standard booster.
+#
+# Hit-rarity odds (Rare Secret through plain Rare in the "rare-or-better" slot) come from
+# thepricedex.com's per-set pull-rate page, itself described as "estimates primarily sourced from
+# Battle Styles pull rates research and supplementary analysis, based on community data" -- a
+# third-party aggregator citing community research, not a first-party study this project
+# independently verified. Sample size: 1,405 packs, per a Reddit source thepricedex cites. That is why this profile is
+# `confidence: low`, unlike the TCGplayer-sourced sv2/sv7/sv8/sv3pt5 profiles (`medium`).
+# thepricedex reports odds as "1 in X packs" per rarity; converting to probability and summing
+# came to ~98.0% instead of 100% (rounding in their published figures), so these are
+# renormalized proportionally to sum to exactly 1.0.
+#
+# NOT independently sourced for this set: the reverse-holo slot's split across
+# Common/Uncommon/Rare/Rare Holo. thepricedex's Darkness Ablaze (swsh3) page is the only one of
+# the six SWSH-era pages here that reports reverse-card odds directly; that split is reused
+# as-is for Battle Styles as a same-era approximation, not re-derived per set.
+#
+# NOT modeled: box-level collation guarantees (none declared) and the guaranteed Energy card slot
+# (no generically-priced basic Energy card rows exist in this project's catalog for swsh5 to
+# attach a probability to -- same reasoning as sv3pt5.yaml's unmodeled Foil Energy slot).
+#
+# Data-quality note unrelated to pull rates: this project's ingested card_variant rows for
+# swsh5 have zero price-linked variants for Rare Ultra/Rare Rainbow/Rare Secret (card rows exist,
+# priced variants don't) -- a pre-existing ingest gap, not something this profile can fix.
+
+set: swsh5
+name: "Battle Styles - standard booster"
+cards_per_pack: 10
+confidence: low
+sample_packs: 1405
+source_urls:
+  - https://www.thepricedex.com/set/swsh5/battle-styles/pull-rates
+notes: >
+  thepricedex.com, community-aggregated estimates (see header comment for the full caveat).
+  Rare-or-better odds as published (1 in X packs): Rare Secret 1/117.0, Rare Rainbow 1/93.6, Rare Ultra 1/27.4, Rare Holo VMAX 1/24.8, Rare Holo V 1/12.4, Rare Holo 1/5.6, Rare 1/1.6. Least trusted figures: the whole
+  profile, frankly -- unlike sv2/sv7/sv8/sv3pt5 this is a third-party aggregation of unverified
+  community research, not a first-party study. Treat as a starting point, not a settled number.
+
+slots:
+  - index: 1
+    label: common
+    repeat: 5
+    outcomes:
+      - {rarity: "Common", probability: 1.0}
+
+  - index: 6
+    label: uncommon
+    repeat: 3
+    outcomes:
+      - {rarity: "Uncommon", probability: 1.0}
+
+  - index: 9
+    label: reverse_holo
+    repeat: 1
+    outcomes:
+      - {rarity: "Rare Holo", probability: 0.116154, variant: reverse_holofoil}
+      - {rarity: "Rare", probability: 0.217157, variant: reverse_holofoil}
+      - {rarity: "Uncommon", probability: 0.322233, variant: reverse_holofoil}
+      - {rarity: "Common", probability: 0.344456, variant: reverse_holofoil}
+
+  - index: 10
+    label: rare_or_better
+    repeat: 1
+    outcomes:
+      - {rarity: "Rare Secret", probability: 0.008719, variant: holofoil}
+      - {rarity: "Rare Rainbow", probability: 0.010899, variant: holofoil}
+      - {rarity: "Rare Ultra", probability: 0.037231, variant: holofoil}
+      - {rarity: "Rare Holo VMAX", probability: 0.041134, variant: holofoil}
+      - {rarity: "Rare Holo V", probability: 0.082269, variant: holofoil}
+      - {rarity: "Rare Holo", probability: 0.182166, variant: holofoil}
+      - {rarity: "Rare", probability: 0.637582, variant: normal}
+
+box_constraints: []

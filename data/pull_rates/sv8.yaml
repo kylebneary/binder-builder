@@ -1,0 +1,77 @@
+# Surging Sparks (sv8) - standard booster.
+#
+# Hit-rarity probabilities (Double Rare, Ultra Rare, ACE SPEC Rare, Illustration Rare, Special
+# Illustration Rare, Hyper Rare) are taken directly from TCGplayer's Authentication Center study:
+# 8,000+ real booster packs opened, reported with a 95% confidence interval per rarity. Card
+# counts per rarity in that article (18 Double Rare, 21 Ultra Rare, 8 ACE SPEC Rare, 23
+# Illustration Rare, 11 Special Illustration Rare, 6 Hyper Rare) match this project's ingested
+# card data for sv8 exactly, which is why these are `confidence: medium` rather than `low`.
+#
+# NOT independently sourced: the split of each reverse-holo slot's leftover probability across
+# Common/Uncommon/Rare reverse holo (55/35/10). TCGplayer's article reports hit rates only, not
+# the filler distribution -- that 55/35/10 split is this project's own placeholder assumption
+# (unchanged from the original illustrative template), which is the reason this profile is
+# `medium` and not `high` confidence overall. It matters only for reverse-holo variant ownership
+# in master-set goals, not for the expensive chase cards that actually drive completion cost.
+#
+# NOT modeled: box-level collation guarantees (e.g. "every box has >=1 SIR"). TCGplayer's
+# methodology samples packs, not boxes, and does not report box guarantees, so none are declared
+# here -- box_constraints is empty, meaning packs are treated as independent draws. If you have a
+# source for Surging Sparks box guarantees, add a box_constraints entry and cite it.
+
+set: sv8
+name: "Surging Sparks - standard booster"
+cards_per_pack: 10
+confidence: medium
+sample_packs: 8000
+source_urls:
+  - https://www.tcgplayer.com/content/article/Pok%C3%A9mon-TCG-Surging-Sparks-Pull-Rates/6ccfb6ab-f26a-4ce8-bab5-5f91c85ec70e/
+notes: >
+  TCGplayer Authentication Center, 8,000+ packs, 95% CI, updated 2025-02-27. Hit rates: Double
+  Rare 16.94% +/- 0.79%, Ultra Rare 6.74% +/- 0.53%, ACE SPEC Rare 5.03% +/- 0.46%, Illustration
+  Rare 7.67% +/- 0.56%, Special Illustration Rare 1.15% +/- 0.22%, Hyper Rare 0.53% +/- 0.15%.
+  Least trusted figure: the 55/35/10 reverse-holo filler split (not from TCGplayer, carried over
+  from the project's illustrative template) and the total absence of box_constraints.
+
+slots:
+  - index: 1
+    label: common
+    repeat: 4
+    outcomes:
+      - {rarity: "Common", probability: 1.0}
+
+  - index: 5
+    label: uncommon
+    repeat: 3
+    outcomes:
+      - {rarity: "Uncommon", probability: 1.0}
+
+  - index: 8
+    label: reverse_holo_ace_spec
+    repeat: 1
+    outcomes:
+      - {rarity: "ACE SPEC Rare", probability: 0.0503, variant: holofoil}
+      - {rarity: "Common", probability: 0.522335, variant: reverse_holofoil}
+      - {rarity: "Uncommon", probability: 0.332395, variant: reverse_holofoil}
+      - {rarity: "Rare", probability: 0.09497, variant: reverse_holofoil}
+
+  - index: 9
+    label: reverse_holo_hit
+    repeat: 1
+    outcomes:
+      - {rarity: "Illustration Rare", probability: 0.0767, variant: holofoil}
+      - {rarity: "Special Illustration Rare", probability: 0.0115, variant: holofoil}
+      - {rarity: "Hyper Rare", probability: 0.0053, variant: holofoil}
+      - {rarity: "Common", probability: 0.498575, variant: reverse_holofoil}
+      - {rarity: "Uncommon", probability: 0.317275, variant: reverse_holofoil}
+      - {rarity: "Rare", probability: 0.09065, variant: reverse_holofoil}
+
+  - index: 10
+    label: rare
+    repeat: 1
+    outcomes:
+      - {rarity: "Double Rare", probability: 0.1694, variant: holofoil}
+      - {rarity: "Ultra Rare", probability: 0.0674, variant: holofoil}
+      - {rarity: "Rare", probability: 0.7632, variant: holofoil}
+
+box_constraints: []

@@ -4,6 +4,10 @@ Build in order. Each phase has an exit criterion; do not begin the next phase un
 Phase 1 must be genuinely usable before Phase 2 starts — an optimizer with no collection data in it
 is a toy.
 
+For missing *data* specifically (sets not yet ingested, pull-rate profiles not yet authored,
+price/variant gaps) see `docs/07-data-backlog.md` — it's the checklist to work from rather than
+re-discovering the same gaps each session.
+
 ---
 
 ## Branching
@@ -101,7 +105,7 @@ cost distribution and a sensitivity chart, and the analytic-agreement test passe
 - [x] 2.2 API + UI: create a goal, see the need list and its plain singles cost.
 - [x] 2.3 Shipping and liquidation cost models with configurable parameters.
 - [x] 2.4 Pull-rate YAML schema, Pydantic validators, `bb sync pullrates` loader.
-- [ ] 2.5 Author profiles for 3–5 sets the owner actually collects, with sources and confidence.
+- [x] 2.5 Author profiles for 3–5 sets the owner actually collects, with sources and confidence.
 - [ ] 2.6 `sim/analytic.py` — closed-form expected remaining cost.
 - [ ] 2.7 `sim/montecarlo.py` — vectorised NumPy engine, box constraints, seeded RNG.
 - [ ] 2.8 Test suite from `docs/04-optimizer-spec.md` (all six categories).
@@ -126,8 +130,59 @@ master_set creation only -- a filter-builder UI is deferred, see `services/goals
 Verified against the real ingested DB: `sv8` master-set goal → 411 needed cards, $1338.92 total
 (35 consolidated orders); plain `set` goal → 249 cards, $1177.47. Both confirmed rendering
 correctly in a real browser (Playwright), not just via the API. `bb sync pullrates` correctly
-skips `_TEMPLATE.yaml`/`EXAMPLE-*.yaml` and reports nothing to sync, since no real profile has
-been authored yet -- that's 2.5, the owner's research work, still open below.
+skips `_TEMPLATE.yaml`/`EXAMPLE-*.yaml` and reports nothing to sync, since no real profile had
+been authored yet at that point -- see 2.5, below.
+
+**2.5 shipped (2026-08-25):** authored 10 real profiles, all sourced and confidence-rated,
+covering every set from the owner's actual collection CSV that (a) is already ingested and (b)
+doesn't hit the Trainer-Gallery/Galarian-Gallery schema gap described below.
+
+*`confidence: medium`* -- `sv2` (Paldea Evolved), `sv3pt5` (151), `sv7` (Stellar Crown), `sv8`
+(Surging Sparks, superseding the old illustrative `EXAMPLE-sv8.yaml`, now deleted). Hit-rarity
+probabilities come from TCGplayer Authentication Center's per-set pull-rate articles (1,500-8,000+
+real packs each, 95% CI) -- their reported card counts per rarity matched this project's ingested
+card data exactly for all four sets, strong corroboration. Two things are explicitly *not* sourced
+and called out in each YAML's own notes: the 55/35/10 split of each reverse-holo slot's non-hit
+filler across Common/Uncommon/Rare (the project's original placeholder assumption -- TCGplayer's
+articles only report hit rates), and box-level collation guarantees (none declared -- packs are
+modeled as independent, since TCGplayer's methodology samples packs, not boxes). That gap is why
+these are `medium`, not `high`.
+
+*`confidence: low`* -- `swsh1` (Sword & Shield), `swsh2` (Rebel Clash), `swsh3` (Darkness Ablaze),
+`swsh5` (Battle Styles), `swsh6` (Chilling Reign), `swsh8` (Fusion Strike). No TCGplayer
+Authentication Center article exists for these at SV-era rigor, so per the owner's explicit
+call ("even estimates will have to do") these use thepricedex.com, a third-party aggregator that
+itself cites "community research" (a disclosed 5,000-pack Reddit sample for Chilling Reign,
+1,405 for Battle Styles, undisclosed for the rest) rather than a verified first-party study.
+Each YAML's header says so plainly and is explicit that "the whole profile" is the least-trusted
+figure, not just one field. The reverse-holo-slot split for all six is taken from thepricedex's
+Darkness Ablaze page (the only one of the six with reverse-card odds) and reused as a same-era
+approximation for the other five, not re-derived per set. All ten profiles pass `bb sync
+pullrates` against the live DB and are idempotent on resync; the full test suite stays green.
+
+Three things were found and deliberately *not* forced into a profile, rather than papered over:
+- **Crown Zenith** (`swsh12pt5`) has real 1,900-pack TCGplayer data available but hits a genuine
+  schema gap: its hit slot draws from the separate `swsh12pt5gg` Galarian Gallery set, which
+  `pull_rate_profile`'s single-`set_id` design can't represent -- see the new note in
+  `docs/02-data-model.md`'s Pull-rate model section. Same blocker applies to every other
+  SWSH-era Trainer Gallery set (Brilliant Stars, Astral Radiance, Lost Origin, Silver Tempest)
+  and to Shining Fates' Shiny Vault subset -- a schema change, not more research, is the
+  prerequisite.
+- **Pokémon GO** (`pgo`) -- despite being the owner's single most-collected set by card count --
+  has no TCGplayer article and nothing on thepricedex either; no source clearing even the relaxed
+  "low confidence, real numbers" bar was found. It's also a special product (sold only as
+  standalone packs, no booster box), which would need its own box-less cost-model handling later
+  regardless.
+- **Vivid Voltage** (`swsh4`) was skipped: it introduced the one-off "Amazing Rare" rarity, which
+  none of the sources found (TCGplayer or thepricedex) account for, and fabricating that
+  probability from nothing would misrepresent the set's actual card pool.
+
+Pre-existing data-quality finding, unrelated to pull rates but discovered while cross-checking
+these: every SWSH-era set checked (`swsh1`/`2`/`3`/`5`/`6`/`8`, likely all of them) has `card`
+rows for Rare Ultra/Rare Rainbow/Rare Secret but **zero** priced `card_variant` rows for those
+same rarities -- a real ingest gap (the cards exist, nothing prices them), noted here rather than
+silently worked around. It doesn't block pull-rate sync (validation only checks `card.rarity`),
+but it means need-list cost for those specific cards will show as unpriced until it's fixed.
 
 ## Phase 3 — Binder designer
 
@@ -162,15 +217,24 @@ pockets.
 ## Suggested next session for Claude Code
 
 Phases 0 and 1 are done (see the outstanding real-data step noted under Phase 1, above -- do that
-by hand or in the next session before trusting the numbers). Phase 2's 2.1-2.4 are done (see the
-note under Phase 2, above) -- goal creation, the need list, and its plain singles cost all work
-end-to-end against the real ingested DB. Next is 2.5: authoring real pull-rate profiles for 3-5
-sets the owner actually collects, with sources and a stated confidence. This is the owner's
-research work, not Claude's -- an hour of reading community pull-rate data per set and writing
-down what's believed and how confident that belief is (see `data/pull_rates/_TEMPLATE.yaml`).
-2.6+ (the actual Monte Carlo simulator) needs those real profiles to test against, so don't start
-the simulator before at least one real profile exists and has been run through `bb sync
-pullrates` successfully.
+by hand or in the next session before trusting the numbers). Phase 2's 2.1-2.5 are all done (see
+the notes under Phase 2, above): goal creation, the need list, its plain singles cost, and ten
+real pull-rate profiles (4 `medium`-confidence TCGplayer-sourced SV-era sets, 6 `low`-confidence
+thepricedex-sourced SWSH-era sets) all work end-to-end against the real ingested DB and pass
+`bb sync pullrates`. Next is 2.6: `sim/analytic.py`, the closed-form expected-cost oracle -- it
+can be built and unit-tested right now against these ten real profiles (none have
+box_constraints yet, which is exactly the case analytic.py is valid for). 2.7
+(`sim/montecarlo.py`, the vectorised engine) doesn't strictly need box_constraints either to get
+started, but exercising the box-collation code path properly will need a profile that has one --
+none of the ten authored so far do, since no sourced box-guarantee data was found for any of
+them. Worth either researching that for one set, or accepting box_constraints coverage as
+synthetic-data-only until a source turns up.
+
+Separately, if picking up pull-rate authoring again: the Trainer-Gallery/Galarian-Gallery schema
+gap (see the Phase 2 note above and `docs/02-data-model.md`'s Pull-rate model section) blocks
+Crown Zenith, Brilliant Stars, Astral Radiance, Lost Origin, Silver Tempest, and Shining Fates --
+real source data exists for several of these, the schema is what's missing. Pokémon GO and Vivid
+Voltage are blocked on not having found adequate source data, not on schema.
 
 ## Where the hard parts are
 
