@@ -146,6 +146,16 @@ and fail loudly, not at simulation time.
 These tables are loaded from `data/pull_rates/*.yaml` by an idempotent sync command. YAML is the
 source of truth; the DB is a cache of it.
 
+**Known gap, found authoring real profiles (2026-08-25):** `pull_rate_profile.set_id` is a single
+set, and `slot_outcome.rarity` is validated against that one set's `card.rarity` values
+(`app/ingest/pullrates.py`). That breaks for products whose hit slot draws from a *different*
+set's card pool — e.g. Crown Zenith (`swsh12pt5`) packs pull Galarian Gallery cards, which
+pokemontcg.io (and this project's ingest) puts in a separate set row, `swsh12pt5gg`. The same
+pattern exists for every "Trainer Gallery" split (Brilliant Stars/Lost Origin/Astral
+Radiance/Silver Tempest + their `*tg` sibling sets). No profile has been authored for any of
+these yet as a result — either `slot_outcome` needs an optional `set_id` override, or
+`pull_rate_profile` needs to support more than one contributing set, before one can be.
+
 ### `simulation_run`
 id, goal_id, created_at, params_json, strategy_json, n_trials, results_json, engine_version.
 
