@@ -33,7 +33,7 @@ Start at `docs/06-roadmap.md`.
 
 ## Stack
 
-Python 3.12 · FastAPI · SQLAlchemy 2.0 · Alembic · SQLite (Postgres-compatible) · NumPy · Typer
+Python 3.11+ · FastAPI · SQLAlchemy 2.0 · Alembic · SQLite (Postgres-compatible) · NumPy · Typer
 React 18 · TypeScript · Vite · TanStack Query · Tailwind
 
 ## Quick start

@@ -10,7 +10,7 @@ BASE_URL = "https://api.pokemontcg.io/v2"
 
 
 def _load(name: str) -> dict:
-    return json.loads((FIXTURES / name).read_text())
+    return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
 
 
 @respx.mock

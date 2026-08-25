@@ -45,7 +45,7 @@ class SealedMapEntry:
 def load_sealed_map(path: Path) -> dict[int, SealedMapEntry]:
     if not path.exists():
         return {}
-    data = yaml.safe_load(path.read_text()) or {}
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     result: dict[int, SealedMapEntry] = {}
     for product_id, entry in data.items():
         result[int(product_id)] = SealedMapEntry(

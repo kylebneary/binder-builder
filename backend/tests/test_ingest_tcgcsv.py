@@ -12,7 +12,7 @@ GROUP_ID = 23651
 
 
 def _load(name: str) -> dict:
-    return json.loads((FIXTURES / name).read_text())
+    return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
 
 
 def _mock_group(respx_mock):

@@ -6,7 +6,27 @@ is a toy.
 
 ---
 
+## Branching
+
+Never commit to `main`. One branch per slice, merged when its exit criteria are met:
+
+| Branch | Covers |
+|---|---|
+| `feat/phase-1-data-ingest` | Phase 0 + tasks 1.1–1.4 |
+| `feat/phase-1-set-mapping` | Tasks 1.5–1.6 |
+| `feat/phase-1-tracker-ui` | Tasks 1.7–1.14 |
+| `feat/phase-2-optimizer` | Phase 2 |
+| `feat/phase-3-binder` | Phase 3 |
+
+Phase 1 is three branches rather than one on purpose. Set mapping (1.5–1.6) is research-shaped
+and will churn through many revisions; keeping it separate lets the schema and ingest work in
+`feat/phase-1-data-ingest` merge to `main` early instead of waiting behind it.
+
+---
+
 ## Phase 0 — Foundation
+
+**Branch:** `feat/phase-1-data-ingest`
 
 **Exit:** `make dev` starts API and frontend; `pytest` passes; an empty DB migrates cleanly.
 
@@ -19,6 +39,8 @@ is a toy.
 - [ ] 0.7 `Makefile`: `dev`, `test`, `lint`, `migrate`, `ingest`.
 
 ## Phase 1 — Collection tracker
+
+**Branches:** `feat/phase-1-data-ingest` (1.1–1.4) · `feat/phase-1-set-mapping` (1.5–1.6) · `feat/phase-1-tracker-ui` (1.7–1.14)
 
 **Exit:** the owner has entered a real collection for at least one full set and the portfolio value
 matches a spot-check against TCGplayer within a few percent.
@@ -46,6 +68,8 @@ matches a spot-check against TCGplayer within a few percent.
 
 ## Phase 2 — Completion optimizer
 
+**Branch:** `feat/phase-2-optimizer`
+
 **Exit:** for a real set and a real collection, the tool produces a ranked strategy list with a
 cost distribution and a sensitivity chart, and the analytic-agreement test passes.
 
@@ -67,6 +91,8 @@ cost distribution and a sensitivity chart, and the analytic-agreement test passe
 - [ ] 2.15 Shopping list export in TCGplayer Mass Entry format.
 
 ## Phase 3 — Binder designer
+
+**Branch:** `feat/phase-3-binder`
 
 **Exit:** the owner has designed a real binder, printed inserts from the PDF, and they fit the
 pockets.
