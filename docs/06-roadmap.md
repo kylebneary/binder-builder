@@ -106,7 +106,7 @@ cost distribution and a sensitivity chart, and the analytic-agreement test passe
 - [x] 2.3 Shipping and liquidation cost models with configurable parameters.
 - [x] 2.4 Pull-rate YAML schema, Pydantic validators, `bb sync pullrates` loader.
 - [x] 2.5 Author profiles for 3–5 sets the owner actually collects, with sources and confidence.
-- [ ] 2.6 `sim/analytic.py` — closed-form expected remaining cost.
+- [x] 2.6 `sim/analytic.py` — closed-form expected remaining cost.
 - [ ] 2.7 `sim/montecarlo.py` — vectorised NumPy engine, box constraints, seeded RNG.
 - [ ] 2.8 Test suite from `docs/04-optimizer-spec.md` (all six categories).
 - [ ] 2.9 Performance pass to the 100k-trials-in-2s target.
@@ -184,6 +184,24 @@ same rarities -- a real ingest gap (the cards exist, nothing prices them), noted
 silently worked around. It doesn't block pull-rate sync (validation only checks `card.rarity`),
 but it means need-list cost for those specific cards will show as unpriced until it's fixed.
 
+**2.6 shipped (2026-08-25):** `sim/analytic.py` implements `per_pack_probability` (P(a given pool
+card appears in a given pack), combining every contributing slot outcome multiplicatively so a
+card referenced by more than one slot -- e.g. a dedicated "rare" slot and a hit slot's normal-Rare
+filler outcome, both present in the spec's own example YAML -- is handled correctly) and
+`expected_remaining_singles_cost` (`Σ price · (1-p)^k` over needed cards). Along the way, a real
+gap in `sim/types.py`'s `CardPool` was found and fixed: it had no way to distinguish variant
+(normal/holofoil/reverse_holofoil/...) within a rarity, so a reverse-holo slot outcome couldn't be
+matched to only reverse-holo pool entries -- exactly the failure mode
+`docs/04-optimizer-spec.md` warns "master-set goals will never complete" if gotten wrong. Added a
+`variant_index`/`variants` field pair (mirrors the existing `rarity_index`/`rarities` pattern) and
+an `indices_for(rarity, variant)` helper that returns empty rather than raising when a
+(rarity, variant) combo has no pool entries -- deliberately tolerant, since the SWSH Rare
+Ultra/Rainbow/Secret zero-variant gap (above) means a real profile can reference a combo that
+doesn't exist in the priced pool yet. 8 new unit tests in `backend/tests/test_sim_analytic.py`
+cover: uniform single-slot probability, multi-slot combination, variant matching, the
+missing-variant-is-zero-not-error case, an exact hand-calculated value, the `k=0` degenerate case,
+excluding not-needed cards, and monotonicity in `k`. Full suite: 113 passing.
+
 ## Phase 3 — Binder designer
 
 **Branch:** `feat/phase-3-binder`
@@ -217,18 +235,19 @@ pockets.
 ## Suggested next session for Claude Code
 
 Phases 0 and 1 are done (see the outstanding real-data step noted under Phase 1, above -- do that
-by hand or in the next session before trusting the numbers). Phase 2's 2.1-2.5 are all done (see
-the notes under Phase 2, above): goal creation, the need list, its plain singles cost, and ten
-real pull-rate profiles (4 `medium`-confidence TCGplayer-sourced SV-era sets, 6 `low`-confidence
-thepricedex-sourced SWSH-era sets) all work end-to-end against the real ingested DB and pass
-`bb sync pullrates`. Next is 2.6: `sim/analytic.py`, the closed-form expected-cost oracle -- it
-can be built and unit-tested right now against these ten real profiles (none have
-box_constraints yet, which is exactly the case analytic.py is valid for). 2.7
-(`sim/montecarlo.py`, the vectorised engine) doesn't strictly need box_constraints either to get
-started, but exercising the box-collation code path properly will need a profile that has one --
-none of the ten authored so far do, since no sourced box-guarantee data was found for any of
-them. Worth either researching that for one set, or accepting box_constraints coverage as
-synthetic-data-only until a source turns up.
+by hand or in the next session before trusting the numbers). Phase 2's 2.1-2.6 are all done (see
+the notes under Phase 2, above): goal creation, the need list, its plain singles cost, ten real
+pull-rate profiles (4 `medium`-confidence TCGplayer-sourced SV-era sets, 6 `low`-confidence
+thepricedex-sourced SWSH-era sets), and the closed-form `sim/analytic.py` oracle all work and are
+unit-tested (113 passing). Next is 2.7: `sim/montecarlo.py`, the vectorised NumPy engine -- it can
+reuse `sim/analytic.py`'s new `CardPool.variant_index`/`indices_for` plumbing directly for
+uniform-within-rarity draws. It doesn't strictly need `box_constraints` to get started (`draw_box`
+without any `guarantees` should degenerate to the same independent-draw model analytic.py uses,
+which is exactly what 2.8's "analytic agreement" test will check), but exercising the box-collation
+code path *properly* needs a profile that actually has a `box_constraint` -- none of the ten
+authored so far do, since no sourced box-guarantee data was found for any of them. Worth either
+researching that for one set, or accepting box_constraints coverage as synthetic-data-only (a
+hand-built test fixture) until a source turns up.
 
 Separately, if picking up pull-rate authoring again: the Trainer-Gallery/Galarian-Gallery schema
 gap (see the Phase 2 note above and `docs/02-data-model.md`'s Pull-rate model section) blocks

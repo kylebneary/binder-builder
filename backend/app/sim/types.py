@@ -16,11 +16,26 @@ class CardPool:
     prices: np.ndarray           # float64, acquisition price
     resale: np.ndarray           # float64, expected net resale
     rarity_index: np.ndarray     # int32, index into `rarities`
+    variant_index: np.ndarray    # int32, index into `variants` (normal/holofoil/reverse_holo/...)
     needed: np.ndarray           # bool, part of goal and not owned
     rarities: list[str] = field(default_factory=list)
+    variants: list[str] = field(default_factory=list)
 
     def indices_for_rarity(self, rarity: str) -> np.ndarray:
         return np.flatnonzero(self.rarity_index == self.rarities.index(rarity))
+
+    def indices_for(self, rarity: str, variant: str) -> np.ndarray:
+        """Pool indices matching both rarity and variant. Empty (not an error) if either is
+        absent from this pool -- e.g. the known SWSH Rare Ultra/Rainbow/Secret zero-variant gap
+        (see docs/07-data-backlog.md), where a slot_outcome references a (rarity, variant) combo
+        that has no priced card_variant rows at all.
+        """
+        if rarity not in self.rarities or variant not in self.variants:
+            return np.empty(0, dtype=np.int64)
+        return np.flatnonzero(
+            (self.rarity_index == self.rarities.index(rarity))
+            & (self.variant_index == self.variants.index(variant))
+        )
 
 
 @dataclass(slots=True)
