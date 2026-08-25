@@ -4,6 +4,7 @@ import type {
   CollectionItemIn,
   CollectionItemOut,
   PortfolioSummaryOut,
+  PortfolioValuePointOut,
   SetDetailOut,
   SetOut,
 } from "./types";
@@ -30,6 +31,13 @@ export function usePortfolio() {
   });
 }
 
+export function usePortfolioHistory() {
+  return useQuery({
+    queryKey: ["portfolio", "history"],
+    queryFn: () => api<PortfolioValuePointOut[]>("/collection/portfolio/history"),
+  });
+}
+
 /** Upserts a collection_item and invalidates the set detail + portfolio queries that just
  * went stale, so owned/needed flags and portfolio value reflect the change immediately. */
 export function useUpsertCollectionItem(ptcgSetId: string | undefined) {
@@ -44,5 +52,7 @@ export function useUpsertCollectionItem(ptcgSetId: string | undefined) {
       if (ptcgSetId) void queryClient.invalidateQueries({ queryKey: ["sets", ptcgSetId] });
       void queryClient.invalidateQueries({ queryKey: ["portfolio"] });
     },
+    // "portfolio" key covers both the summary and ["portfolio", "history"] (query keys match by
+    // prefix), so no separate invalidation is needed for the history chart.
   });
 }

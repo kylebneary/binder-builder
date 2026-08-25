@@ -87,6 +87,13 @@ class CollectionItemOut(BaseModel):
     notes: str | None
 
 
+class PortfolioValuePointOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    observed_on: str
+    total_market_value: Decimal
+
+
 class PortfolioSummaryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

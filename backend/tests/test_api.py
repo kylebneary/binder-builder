@@ -132,6 +132,10 @@ def test_collection_crud_and_portfolio_roundtrip(client):
     assert summary["total_market_value"] == "0.18"  # 3 * 0.06
     assert summary["total_cost_basis"] == "3.00"  # 3 * 1.00
 
+    r = client.get("/api/v1/collection/portfolio/history")
+    history = r.json()
+    assert history == [{"observed_on": "2026-08-25", "total_market_value": "0.18"}]
+
     # Owned/needed reflects the new holding now.
     r = client.get("/api/v1/sets/sv8")
     assert r.json()["owned_count"] == 1

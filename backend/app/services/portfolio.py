@@ -1,8 +1,9 @@
-"""Portfolio value: current market value, cost basis, unrealized gain (PRD T6)."""
+"""Portfolio value: current market value, cost basis, unrealized gain (PRD T6), and a
+value-over-time series from price history (PRD T8)."""
 from dataclasses import dataclass
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import bindparam, select, text
 from sqlalchemy.orm import Session
 
 from app.models import CardVariant, CollectionItem
@@ -71,3 +72,71 @@ def get_portfolio_summary(db: Session, collection_id: int) -> PortfolioSummary:
         priced_item_count=priced_item_count,
         price_date=price_date,
     )
+
+
+@dataclass(slots=True)
+class PortfolioValuePoint:
+    observed_on: str
+    total_market_value: Decimal
+
+
+def get_portfolio_value_history(db: Session, collection_id: int) -> list[PortfolioValuePoint]:
+    """Value of the *current* holdings, priced at every date price history has data for.
+
+    This is not a record of what was owned on each past date -- collection_item only tracks
+    current quantity, not a history of changes (see docs/02-data-model.md) -- so this answers
+    "what would today's collection have been worth on each past date", which is what PRD T8's
+    "value history... a real time series" means given that data model.
+    """
+    items = list(
+        db.execute(
+            select(CollectionItem).where(CollectionItem.collection_id == collection_id)
+        ).scalars()
+    )
+    if not items:
+        return []
+
+    variant_ids = [i.card_variant_id for i in items]
+    variants = {
+        v.id: v
+        for v in db.execute(select(CardVariant).where(CardVariant.id.in_(variant_ids))).scalars()
+    }
+    qty_by_key: dict[tuple[int, str], int] = {}
+    for item in items:
+        variant = variants.get(item.card_variant_id)
+        if (
+            variant is None
+            or variant.tcgplayer_product_id is None
+            or variant.tcgplayer_sub_type_name is None
+        ):
+            continue
+        key = (variant.tcgplayer_product_id, variant.tcgplayer_sub_type_name)
+        qty_by_key[key] = qty_by_key.get(key, 0) + item.quantity
+    if not qty_by_key:
+        return []
+
+    product_ids = sorted({k[0] for k in qty_by_key})
+    # Not deduplicating by source: only tcgcsv is ingested today (see docs/03-data-sources.md),
+    # so (product_id, sub_type_name, observed_on) is effectively unique in practice. If a second
+    # source is ever ingested for the same dates this would double-count and needs a preference
+    # order, same as current_price would.
+    stmt = text(
+        "SELECT tcgplayer_product_id, sub_type_name, observed_on, market FROM price_point "
+        "WHERE tcgplayer_product_id IN :product_ids AND market IS NOT NULL"
+    ).bindparams(bindparam("product_ids", expanding=True))
+    rows = db.execute(stmt, {"product_ids": product_ids}).mappings().all()
+
+    value_by_date: dict[str, Decimal] = {}
+    for row in rows:
+        key = (row["tcgplayer_product_id"], row["sub_type_name"])
+        qty = qty_by_key.get(key)
+        if qty is None:
+            continue
+        observed_on = str(row["observed_on"])
+        market = Decimal(str(row["market"]))
+        value_by_date[observed_on] = value_by_date.get(observed_on, Decimal("0")) + market * qty
+
+    return [
+        PortfolioValuePoint(observed_on=d, total_market_value=value_by_date[d])
+        for d in sorted(value_by_date)
+    ]

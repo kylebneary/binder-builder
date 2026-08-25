@@ -12,12 +12,12 @@ export default function Nav() {
           binder-builder
         </Link>
         {portfolio && (
-          <div className="text-sm text-neutral-600">
+          <Link to="/portfolio" className="text-sm text-neutral-600 hover:text-neutral-900">
             Portfolio value:{" "}
             <span className="font-medium text-neutral-900">
               {formatMoney(portfolio.total_market_value)}
             </span>
-          </div>
+          </Link>
         )}
       </div>
     </header>

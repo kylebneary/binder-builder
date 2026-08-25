@@ -2,7 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
-from app.api.schemas import CollectionItemIn, CollectionItemOut, PortfolioSummaryOut
+from app.api.schemas import (
+    CollectionItemIn,
+    CollectionItemOut,
+    PortfolioSummaryOut,
+    PortfolioValuePointOut,
+)
 from app.services import collection as collection_service
 from app.services import portfolio as portfolio_service
 
@@ -51,3 +56,10 @@ def portfolio_summary(db: Session = Depends(get_db)) -> PortfolioSummaryOut:
     collection = collection_service.get_or_create_default_collection(db)
     summary = portfolio_service.get_portfolio_summary(db, collection.id)
     return PortfolioSummaryOut.model_validate(summary)
+
+
+@router.get("/portfolio/history", response_model=list[PortfolioValuePointOut])
+def portfolio_value_history(db: Session = Depends(get_db)) -> list[PortfolioValuePointOut]:
+    collection = collection_service.get_or_create_default_collection(db)
+    points = portfolio_service.get_portfolio_value_history(db, collection.id)
+    return [PortfolioValuePointOut.model_validate(p) for p in points]

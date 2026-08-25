@@ -8,7 +8,7 @@ from app.services.collection import (
     get_or_create_default_collection,
     upsert_collection_item,
 )
-from app.services.portfolio import get_portfolio_summary
+from app.services.portfolio import get_portfolio_summary, get_portfolio_value_history
 
 
 def _seed_two_variants(db) -> tuple[CardVariant, CardVariant]:
@@ -126,3 +126,47 @@ def test_portfolio_handles_variant_with_no_price_gracefully(db):
     assert summary.total_market_value == Decimal("0")
     assert summary.item_count == 1
     assert summary.priced_item_count == 0
+
+
+def test_value_history_empty_collection_returns_empty_list(db):
+    collection = get_or_create_default_collection(db)
+    assert get_portfolio_value_history(db, collection.id) == []
+
+
+def test_value_history_prices_current_holdings_at_each_past_date(db):
+    normal, reverse = _seed_two_variants(db)
+    # A second, older price snapshot for the same products.
+    db.add_all(
+        [
+            PricePoint(
+                tcgplayer_product_id=589855,
+                sub_type_name="Normal",
+                observed_on=date(2026, 8, 20),
+                source="tcgcsv",
+                market=1.00,
+            ),
+            PricePoint(
+                tcgplayer_product_id=589855,
+                sub_type_name="Reverse Holofoil",
+                observed_on=date(2026, 8, 20),
+                source="tcgcsv",
+                market=20.00,
+            ),
+        ]
+    )
+    db.commit()
+
+    collection = get_or_create_default_collection(db)
+    upsert_collection_item(
+        db, collection.id, CollectionItemData(card_variant_id=normal.id, quantity=4)
+    )
+    upsert_collection_item(
+        db, collection.id, CollectionItemData(card_variant_id=reverse.id, quantity=1)
+    )
+
+    history = get_portfolio_value_history(db, collection.id)
+    assert [p.observed_on for p in history] == ["2026-08-20", "2026-08-25"]
+    # 2026-08-20: 4 * 1.00 + 1 * 20.00 = 24.00
+    assert history[0].total_market_value == Decimal("24.00")
+    # 2026-08-25 (from _seed_two_variants): 4 * 1.50 + 1 * 28.00 = 34.00
+    assert history[1].total_market_value == Decimal("34.00")

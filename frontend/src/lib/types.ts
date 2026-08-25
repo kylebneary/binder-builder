@@ -84,6 +84,11 @@ export interface PortfolioSummaryOut {
   price_date: string | null;
 }
 
+export interface PortfolioValuePointOut {
+  observed_on: string;
+  total_market_value: string;
+}
+
 export function parseMoney(value: string | null): number | null {
   if (value === null) return null;
   const n = Number(value);
