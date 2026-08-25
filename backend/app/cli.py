@@ -1,6 +1,11 @@
 """Typer CLI. Every optimizer/ingest capability must be reachable here without the UI."""
+
 import typer
 from rich.console import Console
+
+from app.db import SessionLocal
+from app.ingest.cards import ingest_sets_and_cards
+from app.ingest.pokemontcg import PokemonTcgCardSource
 
 app = typer.Typer(help="binder-builder")
 ingest_app = typer.Typer(help="Data ingestion")
@@ -14,9 +19,34 @@ console = Console()
 
 
 @ingest_app.command("cards")
-def ingest_cards(set_id: str = typer.Option(None, "--set"), all_sets: bool = False) -> None:
+def ingest_cards(
+    set_id: list[str] | None = typer.Option(  # noqa: B008 -- required Typer pattern
+        None, "--set", help="ptcg_set_id, e.g. sv8. Repeatable."
+    ),
+    all_sets: bool = typer.Option(False, "--all", help="Ingest every set from pokemontcg.io."),
+) -> None:
     """Pull card metadata from pokemontcg.io."""
-    raise NotImplementedError  # TODO(phase-1.2)
+    if bool(set_id) == all_sets:
+        console.print("[red]Pass exactly one of --set (repeatable) or --all.[/red]")
+        raise typer.Exit(code=1)
+
+    source = PokemonTcgCardSource()
+    db = SessionLocal()
+    try:
+        results = ingest_sets_and_cards(db, source, None if all_sets else list(set_id or []))
+    finally:
+        source.client.close()
+        db.close()
+
+    failed = False
+    for r in results:
+        if r.error:
+            failed = True
+            console.print(f"[red]{r.ptcg_set_id}: FAILED -- {r.error}[/red]")
+        else:
+            console.print(f"{r.ptcg_set_id}: {r.n_cards} cards")
+    if failed:
+        raise typer.Exit(code=1)
 
 
 @ingest_app.command("prices")
