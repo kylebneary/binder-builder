@@ -230,7 +230,7 @@ def import_csv(
     of these three tools (see app/services/csv_import.py) -- always check the printed column
     mapping and the dry-run diff before trusting an --apply run.
     """
-    content = Path(path).read_text()
+    content = Path(path).read_text(encoding="utf-8")
     columns, rows = parse_csv(content)
     console.print(f"Detected columns: {columns}")
     if not rows:

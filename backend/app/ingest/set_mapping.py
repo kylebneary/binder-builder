@@ -133,7 +133,7 @@ _HEADER = (
 def load_set_map(path: Path) -> dict[str, int]:
     if not path.exists():
         return {}
-    data = yaml.safe_load(path.read_text()) or {}
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     return {str(k): int(v) for k, v in data.items()}
 
 

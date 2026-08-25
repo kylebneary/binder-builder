@@ -15,7 +15,7 @@ class FakeCardSource:
     name = "fake"
 
     def fetch_sets(self):
-        data = json.loads((FIXTURES / "pokemontcg_sets.json").read_text())["data"]
+        data = json.loads((FIXTURES / "pokemontcg_sets.json").read_text(encoding="utf-8"))["data"]
         for raw in data:
             images = raw.get("images") or {}
             yield SetDTO(
@@ -33,7 +33,7 @@ class FakeCardSource:
     def fetch_cards(self, set_ref: str):
         if set_ref != "sv8":
             return
-        data = json.loads((FIXTURES / "pokemontcg_cards_sv8.json").read_text())["data"]
+        data = json.loads((FIXTURES / "pokemontcg_cards_sv8.json").read_text(encoding="utf-8"))["data"]
         for raw in data:
             images = raw.get("images") or {}
             yield CardDTO(

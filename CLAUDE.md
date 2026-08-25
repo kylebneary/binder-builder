@@ -15,7 +15,8 @@ A local-first Pokémon TCG collection tool with three pillars:
 
 ## Stack (decided — do not re-litigate without asking)
 
-- **Backend:** Python 3.12, FastAPI, SQLAlchemy 2.0 (typed ORM), Alembic, Pydantic v2.
+- **Backend:** Python 3.11+ (dev machine has 3.11.5 via Anaconda, no 3.12 installed), FastAPI,
+  SQLAlchemy 2.0 (typed ORM), Alembic, Pydantic v2.
 - **Database:** SQLite by default (local-first, single file). All SQL must stay Postgres-compatible;
   no SQLite-only syntax. `DATABASE_URL` switches engines.
 - **Stats:** NumPy for simulation. Vectorize Monte Carlo trials; do not loop in pure Python over
@@ -63,6 +64,11 @@ scripts/         One-off maintenance scripts
 
 - Build in the order given in `docs/06-roadmap.md`. Phase 1 (tracker) must be usable before
   Phase 2 (optimizer) starts.
+- **Never commit directly to `main`.** Each roadmap slice gets its own branch, named
+  `feat/phase-<n>-<slice>` — the branch names are listed against their phases in
+  `docs/06-roadmap.md`. Phase 1 is deliberately split across three branches rather than one,
+  because the set-mapping work is research-shaped and will churn; keeping it out of the branch
+  carrying the schema migrations means those can merge early.
 - When a spec in `docs/` is wrong or incomplete, update the doc in the same commit as the code.
 - Add a new data source by writing an adapter in `backend/app/ingest/`, not by editing call sites.
 - Money is `Numeric(10,2)` in the DB and `Decimal` in Python. Never float for currency. Floats are

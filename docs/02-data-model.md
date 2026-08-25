@@ -81,6 +81,7 @@ Masterball holo patterns in Prismatic Evolutions, 1st Edition in WotC sets) with
 | pack_config_id | FK pull_rate_profile null | which pack model these packs follow |
 | msrp | numeric(10,2) null | |
 | contains_promos | bool | ETBs and collections include non-pack cards; model separately |
+| image_url | text null | |
 
 `product_type` and `packs_per_unit` cannot be reliably parsed from names. Ship a curated
 `data/sealed_map.yaml` keyed by product ID, and a review queue for unmapped sealed products.

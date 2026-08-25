@@ -2,7 +2,7 @@
 name = "binder-builder"
 version = "0.1.0"
 description = "Pokemon TCG collection tracker, set-completion optimizer, and binder designer"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
@@ -50,7 +50,7 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body"]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.11"
 plugins = ["pydantic.mypy"]
 ignore_missing_imports = true
 
