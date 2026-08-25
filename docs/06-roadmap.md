@@ -97,10 +97,10 @@ Phase 1's exit criterion is *really* met, independent of the sealed-map curation
 **Exit:** for a real set and a real collection, the tool produces a ranked strategy list with a
 cost distribution and a sensitivity chart, and the analytic-agreement test passes.
 
-- [ ] 2.1 Models + migration: `goal`, `goal_item`; goal builder service (set / master set / filter).
-- [ ] 2.2 API + UI: create a goal, see the need list and its plain singles cost.
-- [ ] 2.3 Shipping and liquidation cost models with configurable parameters.
-- [ ] 2.4 Pull-rate YAML schema, Pydantic validators, `bb sync pullrates` loader.
+- [x] 2.1 Models + migration: `goal`, `goal_item`; goal builder service (set / master set / filter).
+- [x] 2.2 API + UI: create a goal, see the need list and its plain singles cost.
+- [x] 2.3 Shipping and liquidation cost models with configurable parameters.
+- [x] 2.4 Pull-rate YAML schema, Pydantic validators, `bb sync pullrates` loader.
 - [ ] 2.5 Author profiles for 3–5 sets the owner actually collects, with sources and confidence.
 - [ ] 2.6 `sim/analytic.py` — closed-form expected remaining cost.
 - [ ] 2.7 `sim/montecarlo.py` — vectorised NumPy engine, box constraints, seeded RNG.
@@ -113,6 +113,21 @@ cost distribution and a sensitivity chart, and the analytic-agreement test passe
       assumptions panel with inline editing.
 - [ ] 2.14 Sensitivity/tornado analysis and the "recommendation is not robust" warning.
 - [ ] 2.15 Shopping list export in TCGplayer Mass Entry format.
+
+**2.1–2.4 shipped (2026-08-25):** `Goal`/`GoalItem`/`PullRateProfile`/`PackSlot`/`SlotOutcome`/
+`BoxConstraint` models and their baseline migration already existed from initial scaffolding, so
+this slice built the service/API/CLI layer around them: `services/goals.py` (goal builder for
+`set`/`master_set`/`filter` types, materialising `goal_item` as a wholesale delete-and-reinsert,
+plus the need-list view), `services/costs.py` (Decimal seller-consolidation shipping + liquidation
+math per `docs/04-optimizer-spec.md`), `ingest/pullrates.py` (Pydantic structural validation +
+DB-dependent rarity-existence check), and `bb goal create` / `bb goal need-list` / `bb sync
+pullrates` CLI commands. API at `/api/v1/goals`; UI at `/goals` and `/goals/:goalId` (set/
+master_set creation only -- a filter-builder UI is deferred, see `services/goals.py`'s docstring).
+Verified against the real ingested DB: `sv8` master-set goal → 411 needed cards, $1338.92 total
+(35 consolidated orders); plain `set` goal → 249 cards, $1177.47. Both confirmed rendering
+correctly in a real browser (Playwright), not just via the API. `bb sync pullrates` correctly
+skips `_TEMPLATE.yaml`/`EXAMPLE-*.yaml` and reports nothing to sync, since no real profile has
+been authored yet -- that's 2.5, the owner's research work, still open below.
 
 ## Phase 3 — Binder designer
 
@@ -147,11 +162,15 @@ pockets.
 ## Suggested next session for Claude Code
 
 Phases 0 and 1 are done (see the outstanding real-data step noted under Phase 1, above -- do that
-by hand or in the next session before trusting the numbers). Phase 2 starts fresh, on its own
-branch: 2.1 (`goal`/`goal_item` models + migration + goal builder service) through 2.4 (pull-rate
-YAML schema + loader) is a clean, self-contained slice that doesn't need the simulator yet. Stop
-there -- 2.5 (authoring real pull-rate profiles) is the owner's research work, not Claude's, and
-2.6+ (the actual simulator) needs those real profiles to test against.
+by hand or in the next session before trusting the numbers). Phase 2's 2.1-2.4 are done (see the
+note under Phase 2, above) -- goal creation, the need list, and its plain singles cost all work
+end-to-end against the real ingested DB. Next is 2.5: authoring real pull-rate profiles for 3-5
+sets the owner actually collects, with sources and a stated confidence. This is the owner's
+research work, not Claude's -- an hour of reading community pull-rate data per set and writing
+down what's believed and how confident that belief is (see `data/pull_rates/_TEMPLATE.yaml`).
+2.6+ (the actual Monte Carlo simulator) needs those real profiles to test against, so don't start
+the simulator before at least one real profile exists and has been run through `bb sync
+pullrates` successfully.
 
 ## Where the hard parts are
 
