@@ -1,0 +1,31 @@
+{
+  "results": [
+    {
+      "groupId": 24831,
+      "name": "ME06: Delta Reign",
+      "abbreviation": "DLR",
+      "isSupplemental": false,
+      "publishedOn": "2026-11-06T00:00:00",
+      "modifiedOn": "2026-08-21T19:13:09.38",
+      "categoryId": 3
+    },
+    {
+      "groupId": 24722,
+      "name": "ME: 30th Celebration",
+      "abbreviation": "30C",
+      "isSupplemental": false,
+      "publishedOn": "2026-09-16T00:00:00",
+      "modifiedOn": "2026-08-24T19:52:29.113",
+      "categoryId": 3
+    },
+    {
+      "groupId": 23651,
+      "name": "SV08: Surging Sparks",
+      "abbreviation": "SSP",
+      "isSupplemental": false,
+      "publishedOn": "2024-11-08T00:00:00",
+      "modifiedOn": "2026-08-24T16:15:19.003",
+      "categoryId": 3
+    }
+  ]
+}

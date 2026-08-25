@@ -25,6 +25,11 @@ project** because it is the only free source that carries sealed products with p
 - Cost: free. Voluntary Patreon support.
 - Update cadence: once daily, ~20:00 UTC. Ingest job should run at 20:30 UTC. Never poll faster.
 - Pokémon category ID: **3**. 218 groups (sets/products) as of 2026-08-25.
+- **Requires a custom `User-Agent` header.** The default header sent by httpx/requests/curl's
+  libcurl UA is blocked outright with `401 Unauthorized` and a plain-text body asking for
+  `User-Agent: Your-Application-Name/X.Y.Z` (see the usage guidelines linked in that response).
+  Discovered live during this session -- not documented anywhere above before now. Every
+  `TcgCsvClient` request in `backend/app/ingest/tcgcsv.py` sets one.
 
 ### Endpoints
 

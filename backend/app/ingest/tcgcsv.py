@@ -14,13 +14,20 @@ from app.ingest.base import PricePointDTO, ProductDTO
 
 log = logging.getLogger(__name__)
 
+# tcgcsv blocks the default httpx/requests User-Agent outright (HTTP 401, "Your User-Agent has
+# been blocked... identify your application by setting User-Agent: Your-Application-Name/X.Y.Z")
+# -- this requirement isn't mentioned anywhere in docs/03-data-sources.md.
+USER_AGENT = "binder-builder/0.1.0"
+
 
 class TcgCsvClient:
     def __init__(self, base_url: str | None = None, category_id: int | None = None) -> None:
         s = get_settings()
         self.base_url = (base_url or s.tcgcsv_base_url).rstrip("/")
         self.category_id = category_id or s.tcgcsv_pokemon_category_id
-        self._client = httpx.Client(timeout=60.0, follow_redirects=True)
+        self._client = httpx.Client(
+            timeout=60.0, follow_redirects=True, headers={"User-Agent": USER_AGENT}
+        )
 
     def _get(self, path: str) -> list[dict]:
         url = f"{self.base_url}{path}"
@@ -75,8 +82,18 @@ class TcgCsvPriceSource:
     def __init__(self, client: TcgCsvClient | None = None) -> None:
         self.client = client or TcgCsvClient()
 
-    def fetch_prices(self, as_of: date) -> Iterable[PricePointDTO]:
-        # TODO(phase-1.4): iterate only groups we have mapped in data/set_map.yaml,
-        # not all 218 -- a full pull is 20-40MB and mostly irrelevant to the user's sets.
-        for group in self.client.fetch_groups():
-            yield from self.client.fetch_group_prices(group["groupId"], as_of)
+    def fetch_prices(
+        self, as_of: date, group_ids: Iterable[int] | None = None
+    ) -> Iterable[PricePointDTO]:
+        """Prices for the given tcgcsv groupIds, or every group if group_ids is None.
+
+        A full pull is 20-40MB and mostly irrelevant to any one user's sets -- callers should
+        pass explicit group_ids (see `bb ingest prices --group`/`--set`) rather than defaulting
+        to every group.
+        """
+        if group_ids is not None:
+            groups = group_ids
+        else:
+            groups = (g["groupId"] for g in self.client.fetch_groups())
+        for group_id in groups:
+            yield from self.client.fetch_group_prices(group_id, as_of)

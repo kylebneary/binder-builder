@@ -8,11 +8,13 @@ from app.config import get_settings
 
 _settings = get_settings()
 
+_is_sqlite = _settings.database_url.startswith("sqlite")
+
 engine = create_engine(
     _settings.database_url,
     echo=False,
     # SQLite needs this for FastAPI's threadpool; harmless to guard on the scheme.
-    connect_args={"check_same_thread": False} if _settings.database_url.startswith("sqlite") else {},
+    connect_args={"check_same_thread": False} if _is_sqlite else {},
 )
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
