@@ -11,14 +11,19 @@ export default function Nav() {
         <Link to="/" className="text-lg font-semibold text-neutral-900">
           binder-builder
         </Link>
-        {portfolio && (
-          <Link to="/portfolio" className="text-sm text-neutral-600 hover:text-neutral-900">
-            Portfolio value:{" "}
-            <span className="font-medium text-neutral-900">
-              {formatMoney(portfolio.total_market_value)}
-            </span>
+        <div className="flex items-center gap-4">
+          <Link to="/goals" className="text-sm text-neutral-600 hover:text-neutral-900">
+            Goals
           </Link>
-        )}
+          {portfolio && (
+            <Link to="/portfolio" className="text-sm text-neutral-600 hover:text-neutral-900">
+              Portfolio value:{" "}
+              <span className="font-medium text-neutral-900">
+                {formatMoney(portfolio.total_market_value)}
+              </span>
+            </Link>
+          )}
+        </div>
       </div>
     </header>
   );

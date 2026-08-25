@@ -104,3 +104,60 @@ class PortfolioSummaryOut(BaseModel):
     item_count: int
     priced_item_count: int
     price_date: str | None
+
+
+class GoalIn(BaseModel):
+    name: str
+    goal_type: str
+    set_id: int | None = None
+    filter_json: dict | None = None
+    target_condition: str = "NM"
+
+
+class GoalOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    goal_type: str
+    set_id: int | None
+    filter_json: dict | None
+    target_condition: str
+
+
+class NeedItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    card_variant_id: int
+    card_name: str
+    number: str
+    rarity: str | None
+    variant: str
+    required_qty: int
+    owned_qty: int
+    need_qty: int
+    market_price: Decimal | None
+
+
+class SinglesCostOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    n_cards: int
+    subtotal: Decimal
+    orders: int
+    shipping: Decimal
+    tax: Decimal
+    total: Decimal
+
+
+class GoalDetailOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    goal_type: str
+    set_id: int | None
+    target_condition: str
+    items: list[NeedItemOut]
+    cost: SinglesCostOut
+    unpriced_count: int

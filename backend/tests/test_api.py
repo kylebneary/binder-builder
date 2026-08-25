@@ -148,3 +148,39 @@ def test_collection_crud_and_portfolio_roundtrip(client):
 def test_delete_missing_item_404(client):
     r = client.delete("/api/v1/collection/items/999999")
     assert r.status_code == 404
+
+
+def test_goal_create_list_detail_delete_roundtrip(client):
+    r = client.get("/api/v1/sets/sv8")
+    set_id = r.json()["id"]
+
+    r = client.post(
+        "/api/v1/goals", json={"name": "Surging Sparks set", "goal_type": "set", "set_id": set_id}
+    )
+    assert r.status_code == 201
+    goal = r.json()
+    assert goal["goal_type"] == "set"
+
+    r = client.get("/api/v1/goals")
+    assert len(r.json()) == 1
+
+    r = client.get(f"/api/v1/goals/{goal['id']}")
+    assert r.status_code == 200
+    detail = r.json()
+    assert len(detail["items"]) == 1
+    assert detail["items"][0]["market_price"] == "0.06"
+    assert detail["cost"]["subtotal"] == "0.06"
+
+    r = client.delete(f"/api/v1/goals/{goal['id']}")
+    assert r.status_code == 204
+    assert client.get(f"/api/v1/goals/{goal['id']}").status_code == 404
+
+
+def test_goal_create_invalid_type_422(client):
+    r = client.post("/api/v1/goals", json={"name": "Bad", "goal_type": "not-a-type"})
+    assert r.status_code == 422
+
+
+def test_goal_detail_404(client):
+    r = client.get("/api/v1/goals/999999")
+    assert r.status_code == 404

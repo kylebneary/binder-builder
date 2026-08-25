@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routers import collection, sets
+from app.api.routers import collection, goals, sets
 
 app = FastAPI(title="binder-builder", version="0.1.0")
 
@@ -22,5 +22,6 @@ def health() -> dict[str, str]:
 
 app.include_router(sets.router, prefix="/api/v1")
 app.include_router(collection.router, prefix="/api/v1")
-# TODO(phase-2): goals, simulate
+app.include_router(goals.router, prefix="/api/v1")
+# TODO(phase-2): simulate
 # TODO(phase-3): binders

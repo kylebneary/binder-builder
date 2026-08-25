@@ -5,12 +5,14 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from sqlalchemy import select
 
 from app.config import get_settings
 from app.db import SessionLocal
 from app.ingest.cards import ingest_sets_and_cards
 from app.ingest.pokemontcg import PokemonTcgCardSource
 from app.ingest.prices import ingest_group_prices, resolve_group_set_pairs
+from app.ingest.pullrates import load_pull_rate_profiles, sync_pull_rates_to_db
 from app.ingest.sealed_map import (
     load_sealed_map,
     sync_sealed_map_to_db,
@@ -18,6 +20,9 @@ from app.ingest.sealed_map import (
 )
 from app.ingest.set_mapping import load_set_map, sync_set_map_to_db
 from app.ingest.tcgcsv import TcgCsvPriceSource
+from app.models import Set as SetModel
+from app.models.enums import GoalType
+from app.services import goals as goals_service
 from app.services.collection import get_or_create_default_collection
 from app.services.csv_export import export_collection_csv
 from app.services.csv_import import apply_import, dry_run_import, parse_csv
@@ -28,11 +33,13 @@ sim_app = typer.Typer(help="Simulation and optimization")
 sync_app = typer.Typer(help="Sync curated YAML into the database")
 import_app = typer.Typer(help="Import collection data from other tools")
 export_app = typer.Typer(help="Export collection data")
+goal_app = typer.Typer(help="Completion goals")
 app.add_typer(ingest_app, name="ingest")
 app.add_typer(sim_app, name="sim")
 app.add_typer(sync_app, name="sync")
 app.add_typer(import_app, name="import")
 app.add_typer(export_app, name="export")
+app.add_typer(goal_app, name="goal")
 
 console = Console()
 
@@ -214,7 +221,29 @@ def sync_sealedmap(
 @sync_app.command("pullrates")
 def sync_pullrates() -> None:
     """Load data/pull_rates/*.yaml into the DB. Idempotent. Fails loudly on invalid profiles."""
-    raise NotImplementedError  # TODO(phase-2.4)
+    pull_rates_dir = get_settings().pull_rates_dir
+    profiles = load_pull_rate_profiles(pull_rates_dir)
+    if not profiles:
+        console.print(
+            f"[yellow]No loadable profiles in {pull_rates_dir} -- nothing to sync.[/yellow]"
+        )
+        return
+
+    db = SessionLocal()
+    try:
+        results = sync_pull_rates_to_db(db, profiles)
+    finally:
+        db.close()
+
+    failed = False
+    for r in results:
+        if r.status.startswith("invalid") or r.status == "no_set_row":
+            failed = True
+            console.print(f"[red]{r.ptcg_set_id}: {r.status}[/red]")
+        else:
+            console.print(f"{r.ptcg_set_id}: {r.status}")
+    if failed:
+        raise typer.Exit(code=1)
 
 
 @import_app.command("csv")
@@ -262,6 +291,70 @@ def export_csv(path: str) -> None:
         db.close()
     Path(path).write_text(content)
     console.print(f"Wrote {path}")
+
+
+@goal_app.command("create")
+def goal_create(
+    name: str = typer.Option(..., "--name", help="Human-readable goal name."),
+    goal_type: str = typer.Option("set", "--type", help="set | master_set"),
+    set_id: str = typer.Option(..., "--set", help="ptcg_set_id, e.g. sv8."),
+) -> None:
+    """Create a completion goal and materialise its need list."""
+    try:
+        parsed_type = GoalType(goal_type)
+    except ValueError:
+        console.print(f"[red]Unknown goal type {goal_type!r} -- use 'set' or 'master_set'.[/red]")
+        raise typer.Exit(code=1) from None
+    if parsed_type not in (GoalType.SET, GoalType.MASTER_SET):
+        console.print(
+            "[red]bb goal create only supports 'set' or 'master_set' -- "
+            "use the API for 'filter' goals.[/red]"
+        )
+        raise typer.Exit(code=1)
+
+    db = SessionLocal()
+    try:
+        set_row = db.execute(
+            select(SetModel).where(SetModel.ptcg_set_id == set_id)
+        ).scalar_one_or_none()
+        if set_row is None:
+            console.print(
+                f"[red]No set with ptcg_set_id={set_id!r} -- "
+                f"run `bb ingest cards --set {set_id}` first.[/red]"
+            )
+            raise typer.Exit(code=1)
+        goal = goals_service.create_goal(db, name=name, goal_type=parsed_type, set_id=set_row.id)
+        console.print(f"Created goal {goal.id}: {goal.name!r} ({goal.goal_type})")
+    finally:
+        db.close()
+
+
+@goal_app.command("need-list")
+def goal_need_list(goal_id: int) -> None:
+    """Print a goal's need list and its plain singles cost."""
+    db = SessionLocal()
+    try:
+        collection = get_or_create_default_collection(db)
+        detail = goals_service.get_goal_need_list(db, goal_id, collection.id)
+    finally:
+        db.close()
+
+    if detail is None:
+        console.print(f"[red]No goal with id {goal_id}.[/red]")
+        raise typer.Exit(code=1)
+
+    console.print(f"Goal {detail.id}: {detail.name!r} ({detail.goal_type})")
+    needed = [i for i in detail.items if i.need_qty > 0]
+    for item in needed:
+        price = f"${item.market_price}" if item.market_price is not None else "no price"
+        console.print(
+            f"  {item.number} {item.card_name} ({item.variant}) x{item.need_qty} -- {price}"
+        )
+    console.print(
+        f"{detail.cost.n_cards} cards needed, {detail.unpriced_count} unpriced -- "
+        f"subtotal ${detail.cost.subtotal}, {detail.cost.orders} orders, "
+        f"shipping ${detail.cost.shipping}, total ${detail.cost.total}"
+    )
 
 
 @sim_app.command("run")

@@ -2,6 +2,8 @@ import { Suspense, lazy } from "react";
 import { Route, Routes } from "react-router-dom";
 import Nav from "./components/Nav";
 import BulkEntryPage from "./pages/BulkEntryPage";
+import GoalDetailPage from "./pages/GoalDetailPage";
+import GoalsPage from "./pages/GoalsPage";
 import SetDetailPage from "./pages/SetDetailPage";
 import SetListPage from "./pages/SetListPage";
 
@@ -31,12 +33,14 @@ export default function App() {
                     </Suspense>
                   }
                 />
+                <Route path="/goals" element={<GoalsPage />} />
+                <Route path="/goals/:goalId" element={<GoalDetailPage />} />
               </Routes>
             </>
           }
         />
       </Routes>
-      {/* TODO(phase-2.13): optimizer results view */}
+      {/* TODO(phase-2.13): optimizer results view (strategy ranking, cost histogram) */}
       {/* TODO(phase-3.3): binder designer canvas */}
     </div>
   );

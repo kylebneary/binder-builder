@@ -89,6 +89,55 @@ export interface PortfolioValuePointOut {
   total_market_value: string;
 }
 
+export interface GoalIn {
+  name: string;
+  goal_type: string;
+  set_id?: number | null;
+  filter_json?: Record<string, unknown> | null;
+  target_condition?: string;
+}
+
+export interface GoalOut {
+  id: number;
+  name: string;
+  goal_type: string;
+  set_id: number | null;
+  filter_json: Record<string, unknown> | null;
+  target_condition: string;
+}
+
+export interface NeedItemOut {
+  card_variant_id: number;
+  card_name: string;
+  number: string;
+  rarity: string | null;
+  variant: string;
+  required_qty: number;
+  owned_qty: number;
+  need_qty: number;
+  market_price: string | null;
+}
+
+export interface SinglesCostOut {
+  n_cards: number;
+  subtotal: string;
+  orders: number;
+  shipping: string;
+  tax: string;
+  total: string;
+}
+
+export interface GoalDetailOut {
+  id: number;
+  name: string;
+  goal_type: string;
+  set_id: number | null;
+  target_condition: string;
+  items: NeedItemOut[];
+  cost: SinglesCostOut;
+  unpriced_count: number;
+}
+
 export function parseMoney(value: string | null): number | null {
   if (value === null) return null;
   const n = Number(value);
