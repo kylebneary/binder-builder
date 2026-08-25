@@ -24,47 +24,57 @@ and will churn through many revisions; keeping it separate lets the schema and i
 
 ---
 
-## Phase 0 — Foundation
+## Phase 0 — Foundation ✅ done
 
 **Branch:** `feat/phase-1-data-ingest`
 
 **Exit:** `make dev` starts API and frontend; `pytest` passes; an empty DB migrates cleanly.
 
-- [ ] 0.1 Python project: `pyproject.toml`, ruff, mypy (non-strict initially), pytest.
-- [ ] 0.2 FastAPI app skeleton, `/health`, CORS for the Vite dev server.
-- [ ] 0.3 SQLAlchemy 2.0 base, session management, `DATABASE_URL` config.
-- [ ] 0.4 Alembic initialised with an empty baseline migration.
-- [ ] 0.5 Typer CLI entry point (`bb`), wired to the same settings.
-- [ ] 0.6 Vite + React + TS + Tailwind + TanStack Query scaffold; API client with generated types.
-- [ ] 0.7 `Makefile`: `dev`, `test`, `lint`, `migrate`, `ingest`.
+- [x] 0.1 Python project: `pyproject.toml`, ruff, mypy (non-strict initially), pytest.
+- [x] 0.2 FastAPI app skeleton, `/health`, CORS for the Vite dev server.
+- [x] 0.3 SQLAlchemy 2.0 base, session management, `DATABASE_URL` config.
+- [x] 0.4 Alembic initialised with an empty baseline migration.
+- [x] 0.5 Typer CLI entry point (`bb`), wired to the same settings.
+- [x] 0.6 Vite + React + TS + Tailwind + TanStack Query scaffold; API client with generated types.
+- [x] 0.7 `Makefile`: `dev`, `test`, `lint`, `migrate`, `ingest`.
 
-## Phase 1 — Collection tracker
+## Phase 1 — Collection tracker ✅ done
 
 **Branches:** `feat/phase-1-data-ingest` (1.1–1.4) · `feat/phase-1-set-mapping` (1.5–1.6) · `feat/phase-1-tracker-ui` (1.7–1.14)
 
 **Exit:** the owner has entered a real collection for at least one full set and the portfolio value
 matches a spot-check against TCGplayer within a few percent.
 
-- [ ] 1.1 Models + migration: `set`, `card`, `card_variant`.
-- [ ] 1.2 `PokemonTcgCardSource` adapter + `bb ingest cards --set sv8` / `--all`.
-- [ ] 1.3 Models + migration: `price_point`, and the `current_price` view.
-- [ ] 1.4 `TcgCsvPriceSource` adapter + `bb ingest prices [--date] [--backfill]`.
-- [ ] 1.5 **Set mapping**: build `data/set_map.yaml` (ptcg set → tcgcsv groupId) with a fuzzy-match
+- [x] 1.1 Models + migration: `set`, `card`, `card_variant`.
+- [x] 1.2 `PokemonTcgCardSource` adapter + `bb ingest cards --set sv8` / `--all`.
+- [x] 1.3 Models + migration: `price_point`, and the `current_price` view.
+- [x] 1.4 `TcgCsvPriceSource` adapter + `bb ingest prices [--date] [--backfill]`.
+- [x] 1.5 **Set mapping**: build `data/set_map.yaml` (ptcg set → tcgcsv groupId) with a fuzzy-match
       helper script and a review report of unmatched sets. Hand-correct the residue.
-- [ ] 1.6 **Card→product mapping**: match cards to TCGplayer product IDs within a set; derive
+- [x] 1.6 **Card→product mapping**: match cards to TCGplayer product IDs within a set; derive
       `card_variant` rows from the `subTypeName` values present. Report unmatched cards.
-- [ ] 1.7 Models + migration: `collection`, `collection_item`, `sealed_holding`.
-- [ ] 1.8 API: collection CRUD, set browse with owned/needed flags, portfolio summary.
-- [ ] 1.9 UI: set list, set detail grid with card images, owned/needed filter.
-- [ ] 1.10 UI: **fast bulk entry mode** — keyboard-driven walk through a set in number order,
+- [x] 1.7 Models + migration: `collection`, `collection_item`, `sealed_holding`.
+- [x] 1.8 API: collection CRUD, set browse with owned/needed flags, portfolio summary.
+- [x] 1.9 UI: set list, set detail grid with card images, owned/needed filter.
+- [x] 1.10 UI: **fast bulk entry mode** — keyboard-driven walk through a set in number order,
       number keys set quantity, arrows navigate, `r` toggles reverse holo. Treat this as a
       first-class feature and time yourself using it; if entering 200 cards takes more than five
       minutes, it is not done.
-- [ ] 1.11 CSV import (Collectr, TCG Collector, Deckbox column mappings) with a dry-run diff.
-- [ ] 1.12 CSV export.
-- [ ] 1.13 Portfolio dashboard: value, cost basis, gain, value-over-time chart from price history.
-- [ ] 1.14 Sealed product catalogue: classify tcgcsv products as sealed, curate
+- [x] 1.11 CSV import (Collectr, TCG Collector, Deckbox column mappings) with a dry-run diff.
+- [x] 1.12 CSV export.
+- [x] 1.13 Portfolio dashboard: value, cost basis, gain, value-over-time chart from price history.
+- [x] 1.14 Sealed product catalogue: classify tcgcsv products as sealed, curate
       `data/sealed_map.yaml` for `product_type` and `packs_per_unit`.
+
+**Outstanding before Phase 1's exit criterion is *really* met:** `pokemontcg.io` was down for both
+sessions that built this phase, so nothing here has run against a full, real card database yet --
+`data/set_map.yaml` has exactly one hand-verified entry (`sv8`), and the tracker has only ever been
+exercised against fixtures or a hand-seeded demo DB. Before starting Phase 2, run for real:
+`bb ingest cards --all`, `python scripts/build_set_map.py` (review its unmatched-set report and
+hand-correct), `bb sync setmap`, `bb ingest prices --set <your sets>`, `bb sync sealedmap` (review
+its unmatched-product report), then actually enter a real collection via the bulk-entry UI and
+spot-check the portfolio value against TCGplayer. That's the real Phase 1 exit check -- everything
+above passing tests is necessary but not sufficient for it.
 
 ## Phase 2 — Completion optimizer
 
@@ -120,19 +130,21 @@ pockets.
 
 ---
 
-## Suggested first session for Claude Code
+## Suggested next session for Claude Code
 
-Phase 0 in full, then 1.1 → 1.4. That gets real card data and real prices into a real database,
-which makes everything after it concrete. Stop there and let the owner inspect the data before
-building UI on top of it.
+Phases 0 and 1 are done (see the outstanding real-data step noted under Phase 1, above -- do that
+by hand or in the next session before trusting the numbers). Phase 2 starts fresh, on its own
+branch: 2.1 (`goal`/`goal_item` models + migration + goal builder service) through 2.4 (pull-rate
+YAML schema + loader) is a clean, self-contained slice that doesn't need the simulator yet. Stop
+there -- 2.5 (authoring real pull-rate profiles) is the owner's research work, not Claude's, and
+2.6+ (the actual simulator) needs those real profiles to test against.
 
 ## Where the hard parts are
 
-Three things will take longer than they look, and none of them is the UI:
-
-1. **1.5 / 1.6, the mapping problem.** Joining pokemontcg.io cards to TCGplayer product IDs has no
-   shared key and the long tail of promos, subsets, and reprints is genuinely messy. Budget real
-   time, build the review queue, and do not let unmatched cards fail silently.
+1. ~~**1.5 / 1.6, the mapping problem.**~~ Done -- turned out to matter even more than expected:
+   tcgcsv's own `cleanName` field mangles disambiguated card names, and its product names for
+   sealed goods are genuinely unparseable (a real "Half Booster Box" SKU sits right next to
+   "Booster Box" for the same set). Both are handled with review queues, not guesses.
 2. **2.7 / 2.9, the vectorised simulator.** The naive implementation is easy and 100× too slow.
    Design for NumPy from the first line rather than optimising later.
 3. **2.5, authoring pull-rate profiles.** This is research and judgement, not coding. Each set is
