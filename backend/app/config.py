@@ -31,6 +31,10 @@ class Settings(BaseSettings):
         return self.data_dir / "set_map.yaml"
 
     @property
+    def sealed_map_path(self) -> Path:
+        return self.data_dir / "sealed_map.yaml"
+
+    @property
     def templates_dir(self) -> Path:
         return self.data_dir / "binder_templates"
 

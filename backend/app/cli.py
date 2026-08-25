@@ -11,6 +11,11 @@ from app.db import SessionLocal
 from app.ingest.cards import ingest_sets_and_cards
 from app.ingest.pokemontcg import PokemonTcgCardSource
 from app.ingest.prices import ingest_group_prices, resolve_group_set_pairs
+from app.ingest.sealed_map import (
+    load_sealed_map,
+    sync_sealed_map_to_db,
+    unmapped_sealed_products,
+)
 from app.ingest.set_mapping import load_set_map, sync_set_map_to_db
 from app.ingest.tcgcsv import TcgCsvPriceSource
 from app.services.collection import get_or_create_default_collection
@@ -129,7 +134,8 @@ def ingest_prices(
             note = "" if r.matched else " (no linked Set -- card_variant matching skipped)"
             console.print(
                 f"group {r.group_id}: {r.n_price_points} price points, "
-                f"{r.n_card_variants} card_variant rows{note}"
+                f"{r.n_card_variants} card_variant rows, "
+                f"{r.n_sealed_products} new sealed_product rows{note}"
             )
     if failed:
         raise typer.Exit(code=1)
@@ -165,6 +171,44 @@ def sync_setmap(
             f"[yellow]{len(missing)} set(s) in {map_path} have no Set row yet -- run "
             f"`bb ingest cards --set <id>` first: {ids}[/yellow]"
         )
+
+
+@sync_app.command("sealedmap")
+def sync_sealedmap(
+    path: str | None = typer.Option(
+        None, "--path", help="Path to the sealed map YAML (default: data/sealed_map.yaml)."
+    ),
+) -> None:
+    """Load data/sealed_map.yaml into sealed_product rows. Idempotent; the YAML is the sole
+    source of truth for product_type/packs_per_unit -- entirely hand-curated, since neither can
+    be reliably parsed from tcgcsv product names (see app/ingest/sealed_map.py)."""
+    map_path = Path(path) if path else get_settings().sealed_map_path
+    mapping = load_sealed_map(map_path)
+
+    db = SessionLocal()
+    try:
+        results = sync_sealed_map_to_db(db, mapping) if mapping else []
+        review_queue = unmapped_sealed_products(db, mapping)
+    finally:
+        db.close()
+
+    missing = [r for r in results if r.status == "no_product_row"]
+    for r in results:
+        if r.status != "no_product_row":
+            console.print(f"product {r.tcgplayer_product_id}: {r.status}")
+    if missing:
+        ids = ", ".join(str(r.tcgplayer_product_id) for r in missing)
+        console.print(
+            f"[yellow]{len(missing)} product(s) in {map_path} have no sealed_product row yet "
+            f"-- run `bb ingest prices` for that set first: {ids}[/yellow]"
+        )
+    if review_queue:
+        console.print(
+            f"[yellow]{len(review_queue)} sealed product(s) need classification in "
+            f"{map_path} (currently product_type=OTHER, packs_per_unit=null):[/yellow]"
+        )
+        for p in review_queue:
+            console.print(f"  {p.tcgplayer_product_id}: {p.name!r}")
 
 
 @sync_app.command("pullrates")
