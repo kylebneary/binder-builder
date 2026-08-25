@@ -1,0 +1,20 @@
+# tcgplayer_product_id -> sealed product classification. Entirely hand-curated -- there is
+# no reliable way to parse product_type/packs_per_unit from tcgcsv names (see
+# docs/02-data-model.md). `bb sync sealedmap` loads this into sealed_product rows and
+# reports any tcgcsv-sealed product not yet listed here as needing classification.
+#
+# Example:
+# 565602:
+#   product_type: booster_pack
+#   packs_per_unit: 1
+
+# Surging Sparks Sleeved Booster Pack (verified live via tcgcsv during this session, groupId
+# 23651) -- "one pack" is unambiguous from the name itself, unlike most sealed product counts.
+565602:
+  product_type: booster_pack
+  packs_per_unit: 1
+
+# 565599 (Surging Sparks Build & Battle Box) is deliberately left unmapped here: the name alone
+# doesn't reliably tell you the pack count (Pokemon Build & Battle boxes have varied between 4
+# and 5 packs across sets/eras), so `bb sync sealedmap` will list it in the review queue rather
+# than guess. Confirm the real count before adding it.

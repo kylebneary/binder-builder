@@ -1,5 +1,6 @@
 """User holdings and collecting goals."""
 from datetime import date
+from decimal import Decimal
 
 from sqlalchemy import JSON, Boolean, Date, ForeignKey, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
@@ -43,7 +44,7 @@ class CollectionItem(Base, TimestampMixin):
     is_graded: Mapped[bool] = mapped_column(Boolean, default=False)
     grader: Mapped[str | None] = mapped_column(String(16))
     grade: Mapped[str | None] = mapped_column(String(8))
-    acquired_price: Mapped[float | None] = mapped_column(Numeric(10, 2))
+    acquired_price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     acquired_on: Mapped[date | None] = mapped_column(Date)
     storage_location: Mapped[str | None] = mapped_column(String(128))
     notes: Mapped[str | None] = mapped_column(String(512))
@@ -58,7 +59,7 @@ class SealedHolding(Base, TimestampMixin):
         ForeignKey("sealed_product.id", ondelete="CASCADE")
     )
     quantity: Mapped[int] = mapped_column(default=1)
-    acquired_price: Mapped[float | None] = mapped_column(Numeric(10, 2))
+    acquired_price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     acquired_on: Mapped[date | None] = mapped_column(Date)
     is_opened: Mapped[bool] = mapped_column(Boolean, default=False)
 

@@ -10,17 +10,28 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ingest.base import PricePointDTO, ProductDTO
 from app.ingest.mapping import match_cards_in_set
+from app.ingest.sealed import upsert_sealed_products
 from app.ingest.tcgcsv import TcgCsvPriceSource
 from app.models import Card, CardVariant, PricePoint, Set
 from app.models.enums import Variant
 
 log = logging.getLogger(__name__)
+
+
+def _to_decimal(value: float | None) -> Decimal | None:
+    """PricePointDTO carries plain floats (the ingest boundary, per CLAUDE.md); the ORM column
+    is Decimal. Convert through str, never straight from float, to avoid binary
+    floating-point error creeping into a stored currency value."""
+    if value is None:
+        return None
+    return Decimal(str(value))
 
 # tcgcsv subTypeName -> Variant enum, per the verified list in docs/03-data-sources.md.
 # NOTE: that list does not include the Prismatic-era Poke Ball Holo / Master Ball Holo
@@ -54,6 +65,7 @@ class GroupIngestResult:
     group_id: int
     n_price_points: int
     n_card_variants: int
+    n_sealed_products: int
     matched: bool
     error: str | None = None
 
@@ -75,11 +87,11 @@ def _upsert_price_point(db: Session, dto: PricePointDTO) -> None:
             source=dto.source,
         )
         db.add(row)
-    row.low = dto.low
-    row.mid = dto.mid
-    row.high = dto.high
-    row.market = dto.market
-    row.direct_low = dto.direct_low
+    row.low = _to_decimal(dto.low)
+    row.mid = _to_decimal(dto.mid)
+    row.high = _to_decimal(dto.high)
+    row.market = _to_decimal(dto.market)
+    row.direct_low = _to_decimal(dto.direct_low)
     row.currency = dto.currency
 
 
@@ -230,28 +242,34 @@ def ingest_group_prices(
             for price in prices:
                 _upsert_price_point(db, price)
 
+            # Fetched unconditionally: sealed products (set_id nullable, per docs/02-data-model.md)
+            # are captured even for a group with no linked Set yet, not just card variants.
+            products = list(source.client.fetch_products(group_id))
+            n_sealed = upsert_sealed_products(db, products, set_row)
+
             n_variants = 0
             if set_row is not None:
-                products = list(source.client.fetch_products(group_id))
                 prices_by_product: dict[int, list[PricePointDTO]] = {}
                 for price in prices:
                     prices_by_product.setdefault(price.tcgplayer_product_id, []).append(price)
                 n_variants = _derive_variants(db, set_row, products, prices_by_product)
             else:
                 log.warning(
-                    "Group %s has no linked Set -- price_point rows written, card_variant "
-                    "matching skipped. Pass --set to link it: `bb ingest prices --group %s "
-                    "--set <ptcg_set_id>`.",
+                    "Group %s has no linked Set -- price_point/sealed_product rows written, "
+                    "card_variant matching skipped. Pass --set to link it: `bb ingest prices "
+                    "--group %s --set <ptcg_set_id>`.",
                     group_id,
                     group_id,
                 )
 
             db.commit()
             results.append(
-                GroupIngestResult(group_id, len(prices), n_variants, matched=set_row is not None)
+                GroupIngestResult(
+                    group_id, len(prices), n_variants, n_sealed, matched=set_row is not None
+                )
             )
         except Exception as exc:
             db.rollback()
             log.error("Failed ingesting group %s: %s", group_id, exc)
-            results.append(GroupIngestResult(group_id, 0, 0, matched=False, error=str(exc)))
+            results.append(GroupIngestResult(group_id, 0, 0, 0, matched=False, error=str(exc)))
     return results

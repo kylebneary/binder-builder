@@ -10,7 +10,7 @@ from app.ingest.prices import (
     resolve_group_set_pairs,
 )
 from app.ingest.tcgcsv import TcgCsvClient, TcgCsvPriceSource
-from app.models import Card, CardVariant, PricePoint, Set
+from app.models import Card, CardVariant, PricePoint, SealedProduct, Set
 from app.models.enums import Variant
 from httpx import Response
 from sqlalchemy import func, select
@@ -88,13 +88,16 @@ def test_ingest_group_prices_writes_price_points_and_variants_and_is_idempotent(
     # diglett (normal+reverse) + dugtrio 123 (normal+reverse) + dugtrio 208 (holofoil) = 5.
     # Product 589858 (Alolan Exeggutor ex #133) has no seeded card, so it contributes 0 --
     # matching is never silent about it (see the "skipping variant derivation" log), but it
-    # doesn't block the other four cards from matching.
-    assert results1 == [GroupIngestResult(GROUP_ID, 8, 5, matched=True)]
+    # doesn't block the other four cards from matching. 2 sealed products in the fixture
+    # (Build & Battle Box, Sleeved Booster Pack) land as sealed_product rows too.
+    assert results1 == [GroupIngestResult(GROUP_ID, 8, 5, 2, matched=True)]
 
     n_prices = db.execute(select(func.count()).select_from(PricePoint)).scalar_one()
     n_variants = db.execute(select(func.count()).select_from(CardVariant)).scalar_one()
+    n_sealed = db.execute(select(func.count()).select_from(SealedProduct)).scalar_one()
     assert n_prices == 8
     assert n_variants == 5
+    assert n_sealed == 2
 
     # Set.tcgplayer_group_id was persisted by the explicit --group/--set pairing.
     set_row = db.execute(select(Set).where(Set.ptcg_set_id == "sv8")).scalar_one()
@@ -104,6 +107,7 @@ def test_ingest_group_prices_writes_price_points_and_variants_and_is_idempotent(
     ingest_group_prices(db, _source(), AS_OF, [(GROUP_ID, "sv8")])
     assert db.execute(select(func.count()).select_from(PricePoint)).scalar_one() == n_prices
     assert db.execute(select(func.count()).select_from(CardVariant)).scalar_one() == n_variants
+    assert db.execute(select(func.count()).select_from(SealedProduct)).scalar_one() == n_sealed
 
 
 @respx.mock
@@ -134,11 +138,15 @@ def test_variant_derivation_only_at_full_confidence(db):
 @respx.mock
 def test_group_without_linked_set_writes_prices_but_skips_variants(db):
     _mock_group(respx.mock)
-    # No Set seeded at all -- --group used alone with nothing mapped yet.
+    # No Set seeded at all -- --group used alone with nothing mapped yet. Sealed products still
+    # get captured (set_id stays null) since that doesn't depend on a matched Set.
     results = ingest_group_prices(db, _source(), AS_OF, [(GROUP_ID, None)])
-    assert results == [GroupIngestResult(GROUP_ID, 8, 0, matched=False)]
+    assert results == [GroupIngestResult(GROUP_ID, 8, 0, 2, matched=False)]
     assert db.execute(select(func.count()).select_from(PricePoint)).scalar_one() == 8
     assert db.execute(select(func.count()).select_from(CardVariant)).scalar_one() == 0
+    sealed = db.execute(select(SealedProduct)).scalars().all()
+    assert {s.tcgplayer_product_id for s in sealed} == {565599, 565602}
+    assert all(s.set_id is None for s in sealed)
 
 
 def test_resolve_group_set_pairs_unequal_counts_raises(db):

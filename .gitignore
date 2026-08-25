@@ -19,6 +19,7 @@ data/images/
 node_modules/
 dist/
 .vite/
+*.tsbuildinfo
 
 .env
 .DS_Store
