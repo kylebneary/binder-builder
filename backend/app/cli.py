@@ -13,14 +13,21 @@ from app.ingest.pokemontcg import PokemonTcgCardSource
 from app.ingest.prices import ingest_group_prices, resolve_group_set_pairs
 from app.ingest.set_mapping import load_set_map, sync_set_map_to_db
 from app.ingest.tcgcsv import TcgCsvPriceSource
+from app.services.collection import get_or_create_default_collection
+from app.services.csv_export import export_collection_csv
+from app.services.csv_import import apply_import, dry_run_import, parse_csv
 
 app = typer.Typer(help="binder-builder")
 ingest_app = typer.Typer(help="Data ingestion")
 sim_app = typer.Typer(help="Simulation and optimization")
 sync_app = typer.Typer(help="Sync curated YAML into the database")
+import_app = typer.Typer(help="Import collection data from other tools")
+export_app = typer.Typer(help="Export collection data")
 app.add_typer(ingest_app, name="ingest")
 app.add_typer(sim_app, name="sim")
 app.add_typer(sync_app, name="sync")
+app.add_typer(import_app, name="import")
+app.add_typer(export_app, name="export")
 
 console = Console()
 
@@ -164,6 +171,53 @@ def sync_setmap(
 def sync_pullrates() -> None:
     """Load data/pull_rates/*.yaml into the DB. Idempotent. Fails loudly on invalid profiles."""
     raise NotImplementedError  # TODO(phase-2.4)
+
+
+@import_app.command("csv")
+def import_csv(
+    path: str,
+    apply: bool = typer.Option(
+        False, "--apply", help="Write to the DB. Default is a dry run: report only, no writes."
+    ),
+) -> None:
+    """Import a Collectr / TCG Collector / Deckbox CSV export.
+
+    Column detection is a best-effort alias table, NOT verified against a real export from any
+    of these three tools (see app/services/csv_import.py) -- always check the printed column
+    mapping and the dry-run diff before trusting an --apply run.
+    """
+    content = Path(path).read_text()
+    columns, rows = parse_csv(content)
+    console.print(f"Detected columns: {columns}")
+    if not rows:
+        console.print("[yellow]No data rows found.[/yellow]")
+        return
+
+    db = SessionLocal()
+    try:
+        results = apply_import(db, rows) if apply else dry_run_import(db, rows)
+    finally:
+        db.close()
+
+    matched = [r for r in results if r.status == "matched"]
+    problems = [r for r in results if r.status != "matched"]
+    verb = "written" if apply else "would be written (dry run -- pass --apply to write)"
+    console.print(f"{len(matched)} / {len(results)} rows matched, {verb}")
+    for r in problems:
+        console.print(f"[yellow]line {r.line_number}: {r.status} -- {r.detail}[/yellow]")
+
+
+@export_app.command("csv")
+def export_csv(path: str) -> None:
+    """Export the default collection to CSV."""
+    db = SessionLocal()
+    try:
+        collection = get_or_create_default_collection(db)
+        content = export_collection_csv(db, collection.id)
+    finally:
+        db.close()
+    Path(path).write_text(content)
+    console.print(f"Wrote {path}")
 
 
 @sim_app.command("run")
