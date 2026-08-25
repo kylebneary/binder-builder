@@ -18,3 +18,1595 @@
 # doesn't reliably tell you the pack count (Pokemon Build & Battle boxes have varied between 4
 # and 5 packs across sets/eras), so `bb sync sealedmap` will list it in the review queue rather
 # than guess. Confirm the real count before adding it.
+
+# The following are unambiguous straight from the tcgcsv product name (a count is spelled out:
+# "Booster Pack" = 1, "[Set of 4]", "3 Pack Blisters", "Single Pack Blister"). Everything else
+# from the 2026-08-25 sealedmap review queue -- Build & Battle Box, Booster Box, Elite Trainer
+# Box, Booster Bundle (LGS), Premium Checklane Blister, any "Case"/"Display" of another product,
+# Half Booster Box, Fun Pack -- needs an outside source to confirm the real count and is left
+# unmapped on purpose.
+565604:
+  product_type: booster_pack
+  packs_per_unit: 1
+565603:
+  product_type: booster_bundle
+  packs_per_unit: 4
+565605:
+  product_type: booster_bundle
+  packs_per_unit: 4
+565634:
+  product_type: blister_3pack
+  packs_per_unit: 3
+565635:
+  product_type: blister_3pack
+  packs_per_unit: 3
+565636:
+  product_type: booster_pack
+  packs_per_unit: 1
+565637:
+  product_type: booster_pack
+  packs_per_unit: 1
+606613:
+  product_type: booster_pack
+  packs_per_unit: 1
+606614:
+  product_type: booster_pack
+  packs_per_unit: 1
+# Systematic pass (2026-08-25): every entry below matched one of four patterns where
+# the pack count is spelled out unambiguously in the tcgcsv product name itself --
+# exact "<Set> Booster Pack" (= 1), "... Bundle [Set of N]" combined with "Booster"
+# in the name, "Single Pack Blister" (= 1), and "3 Pack Blister" (= 3). Verified against
+# zero false positives in a manual spot-check of each bucket before generating this.
+# Anything with "Case" or a second-order "[Set of N]" wrapping one of these patterns
+# (e.g. a bundle of blisters) was deliberately excluded -- still needs hand review.
+91595:
+  product_type: booster_pack
+  packs_per_unit: 1
+91602:
+  product_type: booster_pack
+  packs_per_unit: 1
+92169:
+  product_type: booster_pack
+  packs_per_unit: 1
+94622:
+  product_type: booster_pack
+  packs_per_unit: 1
+97722:
+  product_type: blister_3pack
+  packs_per_unit: 3
+97723:
+  product_type: blister_3pack
+  packs_per_unit: 3
+97734:
+  product_type: blister_3pack
+  packs_per_unit: 3
+97736:
+  product_type: booster_pack
+  packs_per_unit: 1
+97737:
+  product_type: blister_3pack
+  packs_per_unit: 3
+97739:
+  product_type: booster_pack
+  packs_per_unit: 1
+97740:
+  product_type: booster_pack
+  packs_per_unit: 1
+97743:
+  product_type: booster_pack
+  packs_per_unit: 1
+97744:
+  product_type: blister_3pack
+  packs_per_unit: 3
+97745:
+  product_type: blister_3pack
+  packs_per_unit: 3
+97746:
+  product_type: blister_3pack
+  packs_per_unit: 3
+97751:
+  product_type: booster_pack
+  packs_per_unit: 1
+97768:
+  product_type: blister_3pack
+  packs_per_unit: 3
+97769:
+  product_type: blister_3pack
+  packs_per_unit: 3
+97770:
+  product_type: booster_pack
+  packs_per_unit: 1
+97771:
+  product_type: booster_pack
+  packs_per_unit: 1
+97784:
+  product_type: blister_3pack
+  packs_per_unit: 3
+97785:
+  product_type: blister_3pack
+  packs_per_unit: 3
+97787:
+  product_type: booster_pack
+  packs_per_unit: 1
+97795:
+  product_type: blister_3pack
+  packs_per_unit: 3
+97796:
+  product_type: blister_3pack
+  packs_per_unit: 3
+98031:
+  product_type: blister_3pack
+  packs_per_unit: 3
+98032:
+  product_type: blister_3pack
+  packs_per_unit: 3
+98515:
+  product_type: booster_pack
+  packs_per_unit: 1
+98517:
+  product_type: booster_pack
+  packs_per_unit: 1
+98519:
+  product_type: booster_pack
+  packs_per_unit: 1
+98521:
+  product_type: booster_pack
+  packs_per_unit: 1
+98522:
+  product_type: booster_pack
+  packs_per_unit: 1
+98525:
+  product_type: booster_pack
+  packs_per_unit: 1
+98526:
+  product_type: booster_pack
+  packs_per_unit: 1
+98529:
+  product_type: booster_pack
+  packs_per_unit: 1
+98530:
+  product_type: booster_pack
+  packs_per_unit: 1
+98533:
+  product_type: booster_pack
+  packs_per_unit: 1
+98534:
+  product_type: booster_pack
+  packs_per_unit: 1
+98537:
+  product_type: booster_pack
+  packs_per_unit: 1
+98538:
+  product_type: booster_pack
+  packs_per_unit: 1
+98541:
+  product_type: booster_pack
+  packs_per_unit: 1
+98542:
+  product_type: booster_pack
+  packs_per_unit: 1
+98545:
+  product_type: booster_pack
+  packs_per_unit: 1
+98546:
+  product_type: booster_pack
+  packs_per_unit: 1
+98549:
+  product_type: booster_pack
+  packs_per_unit: 1
+98550:
+  product_type: booster_pack
+  packs_per_unit: 1
+98553:
+  product_type: booster_pack
+  packs_per_unit: 1
+98554:
+  product_type: booster_pack
+  packs_per_unit: 1
+98557:
+  product_type: booster_pack
+  packs_per_unit: 1
+98558:
+  product_type: booster_pack
+  packs_per_unit: 1
+98561:
+  product_type: booster_pack
+  packs_per_unit: 1
+98562:
+  product_type: booster_pack
+  packs_per_unit: 1
+98565:
+  product_type: booster_pack
+  packs_per_unit: 1
+98566:
+  product_type: booster_pack
+  packs_per_unit: 1
+98569:
+  product_type: booster_pack
+  packs_per_unit: 1
+98570:
+  product_type: booster_pack
+  packs_per_unit: 1
+98573:
+  product_type: booster_pack
+  packs_per_unit: 1
+98574:
+  product_type: booster_pack
+  packs_per_unit: 1
+98577:
+  product_type: booster_pack
+  packs_per_unit: 1
+98578:
+  product_type: booster_pack
+  packs_per_unit: 1
+98581:
+  product_type: booster_pack
+  packs_per_unit: 1
+98582:
+  product_type: booster_pack
+  packs_per_unit: 1
+98585:
+  product_type: booster_pack
+  packs_per_unit: 1
+98586:
+  product_type: booster_pack
+  packs_per_unit: 1
+98589:
+  product_type: booster_pack
+  packs_per_unit: 1
+98591:
+  product_type: booster_pack
+  packs_per_unit: 1
+98594:
+  product_type: booster_pack
+  packs_per_unit: 1
+98595:
+  product_type: booster_pack
+  packs_per_unit: 1
+98944:
+  product_type: booster_pack
+  packs_per_unit: 1
+98946:
+  product_type: booster_pack
+  packs_per_unit: 1
+98947:
+  product_type: blister_3pack
+  packs_per_unit: 3
+98948:
+  product_type: booster_pack
+  packs_per_unit: 1
+100490:
+  product_type: booster_pack
+  packs_per_unit: 1
+100493:
+  product_type: blister_3pack
+  packs_per_unit: 3
+100494:
+  product_type: blister_3pack
+  packs_per_unit: 3
+100501:
+  product_type: blister_3pack
+  packs_per_unit: 3
+104380:
+  product_type: blister_3pack
+  packs_per_unit: 3
+104381:
+  product_type: blister_3pack
+  packs_per_unit: 3
+106214:
+  product_type: booster_pack
+  packs_per_unit: 1
+106215:
+  product_type: booster_pack
+  packs_per_unit: 1
+107666:
+  product_type: booster_pack
+  packs_per_unit: 1
+108635:
+  product_type: blister_3pack
+  packs_per_unit: 3
+108636:
+  product_type: blister_3pack
+  packs_per_unit: 3
+108637:
+  product_type: booster_pack
+  packs_per_unit: 1
+108638:
+  product_type: booster_pack
+  packs_per_unit: 1
+111279:
+  product_type: booster_pack
+  packs_per_unit: 1
+117268:
+  product_type: blister_3pack
+  packs_per_unit: 3
+117269:
+  product_type: blister_3pack
+  packs_per_unit: 3
+117270:
+  product_type: booster_pack
+  packs_per_unit: 1
+117271:
+  product_type: booster_pack
+  packs_per_unit: 1
+117272:
+  product_type: blister_3pack
+  packs_per_unit: 3
+117273:
+  product_type: blister_3pack
+  packs_per_unit: 3
+117275:
+  product_type: blister_3pack
+  packs_per_unit: 3
+117276:
+  product_type: blister_3pack
+  packs_per_unit: 3
+118337:
+  product_type: booster_pack
+  packs_per_unit: 1
+118338:
+  product_type: booster_pack
+  packs_per_unit: 1
+120702:
+  product_type: booster_pack
+  packs_per_unit: 1
+120703:
+  product_type: booster_pack
+  packs_per_unit: 1
+120704:
+  product_type: blister_3pack
+  packs_per_unit: 3
+120705:
+  product_type: blister_3pack
+  packs_per_unit: 3
+120706:
+  product_type: blister_3pack
+  packs_per_unit: 3
+120707:
+  product_type: blister_3pack
+  packs_per_unit: 3
+126052:
+  product_type: blister_3pack
+  packs_per_unit: 3
+126054:
+  product_type: blister_3pack
+  packs_per_unit: 3
+129385:
+  product_type: booster_pack
+  packs_per_unit: 1
+129889:
+  product_type: booster_pack
+  packs_per_unit: 1
+129906:
+  product_type: booster_pack
+  packs_per_unit: 1
+129907:
+  product_type: booster_pack
+  packs_per_unit: 1
+130013:
+  product_type: booster_pack
+  packs_per_unit: 1
+133774:
+  product_type: booster_pack
+  packs_per_unit: 1
+136597:
+  product_type: booster_pack
+  packs_per_unit: 1
+136598:
+  product_type: booster_pack
+  packs_per_unit: 1
+136599:
+  product_type: blister_3pack
+  packs_per_unit: 3
+136600:
+  product_type: blister_3pack
+  packs_per_unit: 3
+138131:
+  product_type: booster_pack
+  packs_per_unit: 1
+138132:
+  product_type: booster_pack
+  packs_per_unit: 1
+138149:
+  product_type: booster_pack
+  packs_per_unit: 1
+138150:
+  product_type: booster_pack
+  packs_per_unit: 1
+138151:
+  product_type: booster_pack
+  packs_per_unit: 1
+138152:
+  product_type: booster_pack
+  packs_per_unit: 1
+138153:
+  product_type: booster_pack
+  packs_per_unit: 1
+146996:
+  product_type: booster_pack
+  packs_per_unit: 1
+155662:
+  product_type: booster_pack
+  packs_per_unit: 1
+155880:
+  product_type: booster_pack
+  packs_per_unit: 1
+162037:
+  product_type: blister_3pack
+  packs_per_unit: 3
+162038:
+  product_type: blister_3pack
+  packs_per_unit: 3
+162039:
+  product_type: booster_pack
+  packs_per_unit: 1
+162040:
+  product_type: booster_pack
+  packs_per_unit: 1
+164297:
+  product_type: booster_pack
+  packs_per_unit: 1
+164298:
+  product_type: blister_3pack
+  packs_per_unit: 3
+164299:
+  product_type: blister_3pack
+  packs_per_unit: 3
+164300:
+  product_type: booster_pack
+  packs_per_unit: 1
+164301:
+  product_type: booster_pack
+  packs_per_unit: 1
+164302:
+  product_type: booster_pack
+  packs_per_unit: 1
+168114:
+  product_type: booster_pack
+  packs_per_unit: 1
+170274:
+  product_type: booster_pack
+  packs_per_unit: 1
+173392:
+  product_type: booster_pack
+  packs_per_unit: 1
+175510:
+  product_type: booster_pack
+  packs_per_unit: 1
+177867:
+  product_type: booster_pack
+  packs_per_unit: 1
+177872:
+  product_type: blister_3pack
+  packs_per_unit: 3
+177873:
+  product_type: blister_3pack
+  packs_per_unit: 3
+177874:
+  product_type: booster_pack
+  packs_per_unit: 1
+177875:
+  product_type: booster_pack
+  packs_per_unit: 1
+177898:
+  product_type: booster_pack
+  packs_per_unit: 1
+177899:
+  product_type: booster_pack
+  packs_per_unit: 1
+177904:
+  product_type: blister_3pack
+  packs_per_unit: 3
+177905:
+  product_type: blister_3pack
+  packs_per_unit: 3
+177906:
+  product_type: booster_pack
+  packs_per_unit: 1
+177907:
+  product_type: booster_pack
+  packs_per_unit: 1
+181699:
+  product_type: booster_pack
+  packs_per_unit: 1
+181700:
+  product_type: blister_3pack
+  packs_per_unit: 3
+181701:
+  product_type: blister_3pack
+  packs_per_unit: 3
+181702:
+  product_type: booster_pack
+  packs_per_unit: 1
+181703:
+  product_type: booster_pack
+  packs_per_unit: 1
+184339:
+  product_type: blister_3pack
+  packs_per_unit: 3
+184340:
+  product_type: blister_3pack
+  packs_per_unit: 3
+184341:
+  product_type: booster_pack
+  packs_per_unit: 1
+184342:
+  product_type: booster_pack
+  packs_per_unit: 1
+185718:
+  product_type: booster_pack
+  packs_per_unit: 1
+187238:
+  product_type: booster_pack
+  packs_per_unit: 1
+187239:
+  product_type: booster_pack
+  packs_per_unit: 1
+188410:
+  product_type: blister_3pack
+  packs_per_unit: 3
+188411:
+  product_type: blister_3pack
+  packs_per_unit: 3
+188412:
+  product_type: booster_pack
+  packs_per_unit: 1
+188413:
+  product_type: booster_pack
+  packs_per_unit: 1
+189810:
+  product_type: booster_pack
+  packs_per_unit: 1
+191883:
+  product_type: booster_pack
+  packs_per_unit: 1
+191884:
+  product_type: blister_3pack
+  packs_per_unit: 3
+191885:
+  product_type: blister_3pack
+  packs_per_unit: 3
+191886:
+  product_type: booster_pack
+  packs_per_unit: 1
+191887:
+  product_type: booster_pack
+  packs_per_unit: 1
+198634:
+  product_type: booster_pack
+  packs_per_unit: 1
+199263:
+  product_type: booster_pack
+  packs_per_unit: 1
+199766:
+  product_type: blister_3pack
+  packs_per_unit: 3
+199767:
+  product_type: blister_3pack
+  packs_per_unit: 3
+199768:
+  product_type: booster_pack
+  packs_per_unit: 1
+199769:
+  product_type: booster_pack
+  packs_per_unit: 1
+206028:
+  product_type: booster_pack
+  packs_per_unit: 1
+206029:
+  product_type: blister_3pack
+  packs_per_unit: 3
+206030:
+  product_type: blister_3pack
+  packs_per_unit: 3
+210562:
+  product_type: booster_pack
+  packs_per_unit: 1
+210564:
+  product_type: booster_pack
+  packs_per_unit: 1
+210565:
+  product_type: booster_pack
+  packs_per_unit: 1
+210567:
+  product_type: blister_3pack
+  packs_per_unit: 3
+210568:
+  product_type: blister_3pack
+  packs_per_unit: 3
+216852:
+  product_type: booster_pack
+  packs_per_unit: 1
+216857:
+  product_type: blister_3pack
+  packs_per_unit: 3
+216858:
+  product_type: blister_3pack
+  packs_per_unit: 3
+216859:
+  product_type: booster_pack
+  packs_per_unit: 1
+216860:
+  product_type: booster_pack
+  packs_per_unit: 1
+218789:
+  product_type: booster_pack
+  packs_per_unit: 1
+221312:
+  product_type: booster_pack
+  packs_per_unit: 1
+221744:
+  product_type: blister_3pack
+  packs_per_unit: 3
+221745:
+  product_type: blister_3pack
+  packs_per_unit: 3
+221746:
+  product_type: booster_pack
+  packs_per_unit: 1
+221747:
+  product_type: booster_pack
+  packs_per_unit: 1
+224945:
+  product_type: blister_3pack
+  packs_per_unit: 3
+224946:
+  product_type: blister_3pack
+  packs_per_unit: 3
+228154:
+  product_type: blister_3pack
+  packs_per_unit: 3
+228155:
+  product_type: blister_3pack
+  packs_per_unit: 3
+229226:
+  product_type: booster_pack
+  packs_per_unit: 1
+229276:
+  product_type: booster_pack
+  packs_per_unit: 1
+229280:
+  product_type: booster_pack
+  packs_per_unit: 1
+229281:
+  product_type: booster_pack
+  packs_per_unit: 1
+229282:
+  product_type: blister_3pack
+  packs_per_unit: 3
+229283:
+  product_type: blister_3pack
+  packs_per_unit: 3
+232636:
+  product_type: booster_pack
+  packs_per_unit: 1
+232748:
+  product_type: booster_pack
+  packs_per_unit: 1
+232770:
+  product_type: booster_pack
+  packs_per_unit: 1
+236257:
+  product_type: booster_pack
+  packs_per_unit: 1
+236268:
+  product_type: blister_3pack
+  packs_per_unit: 3
+236269:
+  product_type: blister_3pack
+  packs_per_unit: 3
+236272:
+  product_type: booster_pack
+  packs_per_unit: 1
+236273:
+  product_type: booster_pack
+  packs_per_unit: 1
+240188:
+  product_type: booster_pack
+  packs_per_unit: 1
+240189:
+  product_type: booster_pack
+  packs_per_unit: 1
+242013:
+  product_type: booster_pack
+  packs_per_unit: 1
+242435:
+  product_type: blister_3pack
+  packs_per_unit: 3
+242438:
+  product_type: booster_pack
+  packs_per_unit: 1
+242444:
+  product_type: blister_3pack
+  packs_per_unit: 3
+242447:
+  product_type: booster_pack
+  packs_per_unit: 1
+242448:
+  product_type: booster_pack
+  packs_per_unit: 1
+242963:
+  product_type: booster_pack
+  packs_per_unit: 1
+242964:
+  product_type: booster_pack
+  packs_per_unit: 1
+244337:
+  product_type: booster_pack
+  packs_per_unit: 1
+245143:
+  product_type: booster_pack
+  packs_per_unit: 1
+246274:
+  product_type: booster_bundle
+  packs_per_unit: 8
+247497:
+  product_type: booster_bundle
+  packs_per_unit: 4
+247498:
+  product_type: booster_bundle
+  packs_per_unit: 4
+247604:
+  product_type: booster_pack
+  packs_per_unit: 1
+247646:
+  product_type: booster_pack
+  packs_per_unit: 1
+247651:
+  product_type: booster_bundle
+  packs_per_unit: 4
+247656:
+  product_type: booster_pack
+  packs_per_unit: 1
+247657:
+  product_type: booster_bundle
+  packs_per_unit: 4
+247658:
+  product_type: booster_bundle
+  packs_per_unit: 8
+247667:
+  product_type: blister_3pack
+  packs_per_unit: 3
+247668:
+  product_type: blister_3pack
+  packs_per_unit: 3
+247669:
+  product_type: booster_pack
+  packs_per_unit: 1
+247670:
+  product_type: booster_pack
+  packs_per_unit: 1
+248577:
+  product_type: booster_pack
+  packs_per_unit: 1
+251879:
+  product_type: booster_pack
+  packs_per_unit: 1
+256124:
+  product_type: booster_pack
+  packs_per_unit: 1
+256125:
+  product_type: booster_pack
+  packs_per_unit: 1
+256128:
+  product_type: booster_pack
+  packs_per_unit: 1
+256129:
+  product_type: booster_pack
+  packs_per_unit: 1
+256130:
+  product_type: blister_3pack
+  packs_per_unit: 3
+256132:
+  product_type: blister_3pack
+  packs_per_unit: 3
+256134:
+  product_type: booster_bundle
+  packs_per_unit: 4
+256135:
+  product_type: booster_bundle
+  packs_per_unit: 4
+256136:
+  product_type: booster_bundle
+  packs_per_unit: 8
+256274:
+  product_type: booster_bundle
+  packs_per_unit: 5
+256275:
+  product_type: booster_bundle
+  packs_per_unit: 10
+257320:
+  product_type: booster_pack
+  packs_per_unit: 1
+263544:
+  product_type: booster_pack
+  packs_per_unit: 1
+264421:
+  product_type: booster_pack
+  packs_per_unit: 1
+265314:
+  product_type: booster_bundle
+  packs_per_unit: 4
+265316:
+  product_type: booster_bundle
+  packs_per_unit: 4
+265317:
+  product_type: booster_bundle
+  packs_per_unit: 4
+265318:
+  product_type: booster_bundle
+  packs_per_unit: 4
+265319:
+  product_type: booster_bundle
+  packs_per_unit: 4
+265320:
+  product_type: booster_bundle
+  packs_per_unit: 4
+265321:
+  product_type: booster_bundle
+  packs_per_unit: 4
+265521:
+  product_type: booster_pack
+  packs_per_unit: 1
+265522:
+  product_type: booster_pack
+  packs_per_unit: 1
+265523:
+  product_type: booster_pack
+  packs_per_unit: 1
+265524:
+  product_type: blister_3pack
+  packs_per_unit: 3
+265525:
+  product_type: blister_3pack
+  packs_per_unit: 3
+265526:
+  product_type: booster_pack
+  packs_per_unit: 1
+265542:
+  product_type: booster_bundle
+  packs_per_unit: 5
+265543:
+  product_type: booster_bundle
+  packs_per_unit: 5
+265544:
+  product_type: booster_bundle
+  packs_per_unit: 8
+265943:
+  product_type: blister_3pack
+  packs_per_unit: 3
+265945:
+  product_type: blister_3pack
+  packs_per_unit: 3
+265946:
+  product_type: blister_3pack
+  packs_per_unit: 3
+266637:
+  product_type: blister_3pack
+  packs_per_unit: 3
+266641:
+  product_type: blister_3pack
+  packs_per_unit: 3
+266642:
+  product_type: blister_3pack
+  packs_per_unit: 3
+267036:
+  product_type: booster_bundle
+  packs_per_unit: 5
+267037:
+  product_type: booster_bundle
+  packs_per_unit: 4
+267038:
+  product_type: booster_bundle
+  packs_per_unit: 4
+267039:
+  product_type: booster_bundle
+  packs_per_unit: 4
+267040:
+  product_type: booster_bundle
+  packs_per_unit: 4
+267041:
+  product_type: booster_bundle
+  packs_per_unit: 4
+267042:
+  product_type: booster_bundle
+  packs_per_unit: 4
+267043:
+  product_type: booster_bundle
+  packs_per_unit: 4
+267044:
+  product_type: booster_bundle
+  packs_per_unit: 4
+267045:
+  product_type: booster_bundle
+  packs_per_unit: 4
+267046:
+  product_type: booster_bundle
+  packs_per_unit: 4
+267047:
+  product_type: booster_bundle
+  packs_per_unit: 4
+268448:
+  product_type: booster_pack
+  packs_per_unit: 1
+272648:
+  product_type: booster_pack
+  packs_per_unit: 1
+272649:
+  product_type: booster_bundle
+  packs_per_unit: 4
+274421:
+  product_type: booster_pack
+  packs_per_unit: 1
+276574:
+  product_type: booster_bundle
+  packs_per_unit: 5
+276577:
+  product_type: booster_bundle
+  packs_per_unit: 5
+276578:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276579:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276580:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276581:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276582:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276583:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276584:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276585:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276586:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276587:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276589:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276590:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276591:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276592:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276593:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276594:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276595:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276596:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276597:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276598:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276599:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276600:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276601:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276602:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276604:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276608:
+  product_type: booster_bundle
+  packs_per_unit: 4
+276609:
+  product_type: blister_3pack
+  packs_per_unit: 3
+277325:
+  product_type: booster_pack
+  packs_per_unit: 1
+277326:
+  product_type: booster_pack
+  packs_per_unit: 1
+277327:
+  product_type: booster_pack
+  packs_per_unit: 1
+277328:
+  product_type: booster_pack
+  packs_per_unit: 1
+277329:
+  product_type: blister_3pack
+  packs_per_unit: 3
+277330:
+  product_type: blister_3pack
+  packs_per_unit: 3
+278794:
+  product_type: booster_bundle
+  packs_per_unit: 4
+278801:
+  product_type: booster_bundle
+  packs_per_unit: 4
+278804:
+  product_type: booster_bundle
+  packs_per_unit: 8
+280301:
+  product_type: booster_pack
+  packs_per_unit: 1
+283388:
+  product_type: booster_pack
+  packs_per_unit: 1
+283393:
+  product_type: blister_3pack
+  packs_per_unit: 3
+283394:
+  product_type: blister_3pack
+  packs_per_unit: 3
+283397:
+  product_type: booster_pack
+  packs_per_unit: 1
+283400:
+  product_type: booster_bundle
+  packs_per_unit: 4
+285778:
+  product_type: booster_bundle
+  packs_per_unit: 4
+285780:
+  product_type: booster_pack
+  packs_per_unit: 1
+285781:
+  product_type: booster_pack
+  packs_per_unit: 1
+453466:
+  product_type: booster_pack
+  packs_per_unit: 1
+454484:
+  product_type: booster_bundle
+  packs_per_unit: 8
+476451:
+  product_type: booster_pack
+  packs_per_unit: 1
+477179:
+  product_type: blister_3pack
+  packs_per_unit: 3
+477180:
+  product_type: blister_3pack
+  packs_per_unit: 3
+478273:
+  product_type: booster_pack
+  packs_per_unit: 1
+478274:
+  product_type: booster_bundle
+  packs_per_unit: 4
+478275:
+  product_type: booster_bundle
+  packs_per_unit: 8
+478759:
+  product_type: booster_bundle
+  packs_per_unit: 4
+478761:
+  product_type: blister_3pack
+  packs_per_unit: 3
+478762:
+  product_type: blister_3pack
+  packs_per_unit: 3
+478765:
+  product_type: booster_pack
+  packs_per_unit: 1
+478766:
+  product_type: booster_pack
+  packs_per_unit: 1
+487794:
+  product_type: booster_bundle
+  packs_per_unit: 4
+487795:
+  product_type: booster_bundle
+  packs_per_unit: 4
+487796:
+  product_type: booster_bundle
+  packs_per_unit: 4
+487797:
+  product_type: booster_bundle
+  packs_per_unit: 4
+487798:
+  product_type: booster_bundle
+  packs_per_unit: 4
+488312:
+  product_type: booster_pack
+  packs_per_unit: 1
+488315:
+  product_type: booster_pack
+  packs_per_unit: 1
+492290:
+  product_type: booster_bundle
+  packs_per_unit: 5
+493976:
+  product_type: booster_pack
+  packs_per_unit: 1
+493997:
+  product_type: blister_3pack
+  packs_per_unit: 3
+493998:
+  product_type: blister_3pack
+  packs_per_unit: 3
+493999:
+  product_type: booster_pack
+  packs_per_unit: 1
+494001:
+  product_type: booster_pack
+  packs_per_unit: 1
+496913:
+  product_type: booster_bundle
+  packs_per_unit: 5
+496927:
+  product_type: booster_pack
+  packs_per_unit: 1
+501256:
+  product_type: booster_pack
+  packs_per_unit: 1
+501259:
+  product_type: blister_3pack
+  packs_per_unit: 3
+501260:
+  product_type: blister_3pack
+  packs_per_unit: 3
+501262:
+  product_type: booster_pack
+  packs_per_unit: 1
+502480:
+  product_type: booster_bundle
+  packs_per_unit: 5
+504467:
+  product_type: booster_pack
+  packs_per_unit: 1
+505945:
+  product_type: booster_pack
+  packs_per_unit: 1
+512047:
+  product_type: booster_pack
+  packs_per_unit: 1
+512822:
+  product_type: booster_pack
+  packs_per_unit: 1
+512831:
+  product_type: booster_bundle
+  packs_per_unit: 4
+513422:
+  product_type: booster_bundle
+  packs_per_unit: 4
+513433:
+  product_type: blister_3pack
+  packs_per_unit: 3
+513434:
+  product_type: blister_3pack
+  packs_per_unit: 3
+514223:
+  product_type: booster_pack
+  packs_per_unit: 1
+514224:
+  product_type: booster_pack
+  packs_per_unit: 1
+515079:
+  product_type: booster_bundle
+  packs_per_unit: 4
+517210:
+  product_type: booster_pack
+  packs_per_unit: 1
+524330:
+  product_type: booster_pack
+  packs_per_unit: 1
+524331:
+  product_type: booster_pack
+  packs_per_unit: 1
+524332:
+  product_type: booster_pack
+  packs_per_unit: 1
+526674:
+  product_type: booster_bundle
+  packs_per_unit: 4
+528038:
+  product_type: booster_pack
+  packs_per_unit: 1
+531444:
+  product_type: booster_bundle
+  packs_per_unit: 4
+531445:
+  product_type: booster_bundle
+  packs_per_unit: 4
+532841:
+  product_type: booster_pack
+  packs_per_unit: 1
+534087:
+  product_type: booster_pack
+  packs_per_unit: 1
+536227:
+  product_type: blister_3pack
+  packs_per_unit: 3
+536229:
+  product_type: blister_3pack
+  packs_per_unit: 3
+536284:
+  product_type: booster_pack
+  packs_per_unit: 1
+536594:
+  product_type: booster_pack
+  packs_per_unit: 1
+538786:
+  product_type: booster_bundle
+  packs_per_unit: 4
+538787:
+  product_type: booster_pack
+  packs_per_unit: 1
+538789:
+  product_type: booster_bundle
+  packs_per_unit: 4
+538807:
+  product_type: booster_bundle
+  packs_per_unit: 8
+542096:
+  product_type: booster_pack
+  packs_per_unit: 1
+543843:
+  product_type: booster_pack
+  packs_per_unit: 1
+544170:
+  product_type: booster_pack
+  packs_per_unit: 1
+544171:
+  product_type: blister_3pack
+  packs_per_unit: 3
+544172:
+  product_type: blister_3pack
+  packs_per_unit: 3
+544177:
+  product_type: booster_pack
+  packs_per_unit: 1
+544179:
+  product_type: booster_pack
+  packs_per_unit: 1
+545766:
+  product_type: booster_bundle
+  packs_per_unit: 4
+546608:
+  product_type: booster_pack
+  packs_per_unit: 1
+546609:
+  product_type: booster_pack
+  packs_per_unit: 1
+549487:
+  product_type: booster_bundle
+  packs_per_unit: 4
+549494:
+  product_type: booster_bundle
+  packs_per_unit: 4
+550673:
+  product_type: booster_pack
+  packs_per_unit: 1
+550675:
+  product_type: booster_pack
+  packs_per_unit: 1
+550676:
+  product_type: booster_pack
+  packs_per_unit: 1
+550677:
+  product_type: booster_pack
+  packs_per_unit: 1
+552997:
+  product_type: booster_pack
+  packs_per_unit: 1
+553007:
+  product_type: blister_3pack
+  packs_per_unit: 3
+557331:
+  product_type: booster_pack
+  packs_per_unit: 1
+557334:
+  product_type: blister_3pack
+  packs_per_unit: 3
+557337:
+  product_type: blister_3pack
+  packs_per_unit: 3
+557338:
+  product_type: booster_pack
+  packs_per_unit: 1
+557341:
+  product_type: booster_pack
+  packs_per_unit: 1
+557352:
+  product_type: booster_pack
+  packs_per_unit: 1
+557357:
+  product_type: booster_bundle
+  packs_per_unit: 4
+557361:
+  product_type: booster_bundle
+  packs_per_unit: 4
+562107:
+  product_type: booster_pack
+  packs_per_unit: 1
+579930:
+  product_type: booster_pack
+  packs_per_unit: 1
+593294:
+  product_type: booster_pack
+  packs_per_unit: 1
+603422:
+  product_type: booster_pack
+  packs_per_unit: 1
+603423:
+  product_type: booster_pack
+  packs_per_unit: 1
+610934:
+  product_type: booster_pack
+  packs_per_unit: 1
+610935:
+  product_type: booster_pack
+  packs_per_unit: 1
+610940:
+  product_type: blister_3pack
+  packs_per_unit: 3
+610948:
+  product_type: blister_3pack
+  packs_per_unit: 3
+610949:
+  product_type: booster_pack
+  packs_per_unit: 1
+610950:
+  product_type: booster_pack
+  packs_per_unit: 1
+616825:
+  product_type: booster_pack
+  packs_per_unit: 1
+617011:
+  product_type: booster_pack
+  packs_per_unit: 1
+617012:
+  product_type: booster_pack
+  packs_per_unit: 1
+617015:
+  product_type: booster_pack
+  packs_per_unit: 1
+617807:
+  product_type: booster_bundle
+  packs_per_unit: 4
+617823:
+  product_type: booster_bundle
+  packs_per_unit: 4
+618829:
+  product_type: booster_pack
+  packs_per_unit: 1
+624683:
+  product_type: booster_pack
+  packs_per_unit: 1
+624684:
+  product_type: booster_pack
+  packs_per_unit: 1
+625581:
+  product_type: booster_pack
+  packs_per_unit: 1
+625582:
+  product_type: booster_pack
+  packs_per_unit: 1
+625683:
+  product_type: blister_3pack
+  packs_per_unit: 3
+625684:
+  product_type: blister_3pack
+  packs_per_unit: 3
+626562:
+  product_type: booster_pack
+  packs_per_unit: 1
+626630:
+  product_type: booster_pack
+  packs_per_unit: 1
+626659:
+  product_type: booster_bundle
+  packs_per_unit: 4
+626660:
+  product_type: booster_bundle
+  packs_per_unit: 4
+630434:
+  product_type: booster_pack
+  packs_per_unit: 1
+630699:
+  product_type: booster_pack
+  packs_per_unit: 1
+633105:
+  product_type: booster_pack
+  packs_per_unit: 1
+633106:
+  product_type: booster_pack
+  packs_per_unit: 1
+635053:
+  product_type: booster_bundle
+  packs_per_unit: 4
+641117:
+  product_type: booster_pack
+  packs_per_unit: 1
+644352:
+  product_type: booster_pack
+  packs_per_unit: 1
+644354:
+  product_type: booster_pack
+  packs_per_unit: 1
+644355:
+  product_type: booster_bundle
+  packs_per_unit: 4
+644356:
+  product_type: blister_3pack
+  packs_per_unit: 3
+644357:
+  product_type: blister_3pack
+  packs_per_unit: 3
+644358:
+  product_type: booster_pack
+  packs_per_unit: 1
+644359:
+  product_type: booster_pack
+  packs_per_unit: 1
+649711:
+  product_type: booster_bundle
+  packs_per_unit: 4
+654144:
+  product_type: booster_pack
+  packs_per_unit: 1
+654145:
+  product_type: booster_pack
+  packs_per_unit: 1
+654150:
+  product_type: booster_pack
+  packs_per_unit: 1
+654151:
+  product_type: booster_pack
+  packs_per_unit: 1
+654154:
+  product_type: blister_3pack
+  packs_per_unit: 3
+654156:
+  product_type: blister_3pack
+  packs_per_unit: 3
+654174:
+  product_type: booster_bundle
+  packs_per_unit: 4
+657489:
+  product_type: booster_pack
+  packs_per_unit: 1
+657490:
+  product_type: booster_pack
+  packs_per_unit: 1
+657875:
+  product_type: booster_bundle
+  packs_per_unit: 4
+659591:
+  product_type: blister_3pack
+  packs_per_unit: 3
+664903:
+  product_type: booster_bundle
+  packs_per_unit: 4
+668624:
+  product_type: booster_bundle
+  packs_per_unit: 4
+672393:
+  product_type: blister_3pack
+  packs_per_unit: 3
+672398:
+  product_type: booster_pack
+  packs_per_unit: 1
+672399:
+  product_type: booster_bundle
+  packs_per_unit: 4
+672410:
+  product_type: booster_pack
+  packs_per_unit: 1
+672412:
+  product_type: booster_pack
+  packs_per_unit: 1
+672413:
+  product_type: booster_bundle
+  packs_per_unit: 4
+672434:
+  product_type: booster_pack
+  packs_per_unit: 1
+680963:
+  product_type: blister_3pack
+  packs_per_unit: 3
+684446:
+  product_type: booster_pack
+  packs_per_unit: 1
+684447:
+  product_type: booster_bundle
+  packs_per_unit: 4
+684448:
+  product_type: booster_pack
+  packs_per_unit: 1
+684449:
+  product_type: booster_bundle
+  packs_per_unit: 4
+684457:
+  product_type: booster_pack
+  packs_per_unit: 1
+690691:
+  product_type: booster_pack
+  packs_per_unit: 1
+692944:
+  product_type: booster_pack
+  packs_per_unit: 1
+692945:
+  product_type: booster_bundle
+  packs_per_unit: 4
+692955:
+  product_type: booster_pack
+  packs_per_unit: 1
+692957:
+  product_type: booster_pack
+  packs_per_unit: 1
+692958:
+  product_type: booster_bundle
+  packs_per_unit: 4
+694977:
+  product_type: booster_pack
+  packs_per_unit: 1
+696144:
+  product_type: booster_pack
+  packs_per_unit: 1
+696150:
+  product_type: booster_pack
+  packs_per_unit: 1
+697502:
+  product_type: booster_pack
+  packs_per_unit: 1
+701484:
+  product_type: booster_pack
+  packs_per_unit: 1
+701485:
+  product_type: booster_pack
+  packs_per_unit: 1
+701595:
+  product_type: booster_pack
+  packs_per_unit: 1
+712093:
+  product_type: blister_3pack
+  packs_per_unit: 3
+712099:
+  product_type: booster_pack
+  packs_per_unit: 1
+712100:
+  product_type: booster_bundle
+  packs_per_unit: 4
+712108:
+  product_type: booster_pack
+  packs_per_unit: 1
+712109:
+  product_type: booster_pack
+  packs_per_unit: 1
+712110:
+  product_type: booster_pack
+  packs_per_unit: 1
+712112:
+  product_type: booster_pack
+  packs_per_unit: 1
+712113:
+  product_type: booster_bundle
+  packs_per_unit: 4
