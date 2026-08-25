@@ -1,0 +1,62 @@
+# Pull-rate profile template. Copy to <ptcg_set_id>.yaml and edit.
+#
+# These numbers are NEVER fetched -- they are researched and written down by a human, with
+# sources. The Pokemon Company does not publish odds for English product, so every figure in
+# circulation is derived from community case-opening logs of unknown sample size.
+#
+# Validation (enforced at load; failures are fatal, not warnings):
+#   - outcome probabilities within a slot sum to 1.0 +/- 1e-6
+#   - sum(repeat) across slots == cards_per_pack
+#   - every `rarity` matches at least one card in the set
+#   - the reverse-holo slot sets variant: reverse_holofoil, or master-set goals never complete
+
+set: sv0                          # ptcg_set_id
+name: "Set Name - standard booster"
+cards_per_pack: 10
+confidence: low                   # high | medium | low
+sample_packs: null                # packs behind the estimate, if the source states it
+source_urls:
+  - https://example.com/source
+notes: >
+  What you believe, why, and which figure you trust least.
+
+slots:
+  - index: 1
+    label: common
+    repeat: 4
+    outcomes:
+      - {rarity: "Common", probability: 1.0}
+
+  - index: 5
+    label: uncommon
+    repeat: 3
+    outcomes:
+      - {rarity: "Uncommon", probability: 1.0}
+
+  - index: 8
+    label: reverse_holo
+    repeat: 1
+    outcomes:
+      - {rarity: "Common",   probability: 0.55, variant: reverse_holofoil}
+      - {rarity: "Uncommon", probability: 0.35, variant: reverse_holofoil}
+      - {rarity: "Rare",     probability: 0.10, variant: reverse_holofoil}
+
+  - index: 9
+    label: rare
+    repeat: 1
+    outcomes:
+      - {rarity: "Rare",      probability: 0.75}
+      - {rarity: "Rare Holo", probability: 0.25}
+
+  - index: 10
+    label: hit
+    repeat: 1
+    outcomes:
+      - {rarity: "Double Rare",               probability: 0.200}
+      - {rarity: "Ultra Rare",                probability: 0.111}
+      - {rarity: "Illustration Rare",         probability: 0.091}
+      - {rarity: "Special Illustration Rare", probability: 0.012}
+      - {rarity: "Hyper Rare",                probability: 0.010}
+      - {rarity: "Rare",                      probability: 0.576}   # no-hit filler
+
+box_constraints: []

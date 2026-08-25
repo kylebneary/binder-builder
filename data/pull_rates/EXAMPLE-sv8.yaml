@@ -1,0 +1,61 @@
+# EXAMPLE ONLY -- illustrative, not researched. Replace before trusting any output from it.
+# Rename to sv8.yaml once the figures have been checked against real community data.
+
+set: sv8
+name: "Surging Sparks - standard booster (ILLUSTRATIVE)"
+cards_per_pack: 10
+confidence: low
+sample_packs: null
+source_urls:
+  - https://pullmarket.io/learn/pokemon-pack-pull-rates
+notes: >
+  Placeholder built from the SV-era community baseline. Surging Sparks is at the LOW end of the
+  SIR range (community figures cluster near 1 in 85-90, versus ~1 in 45 for Prismatic Evolutions),
+  which is exactly the kind of set-specific difference that a global default gets wrong by a
+  factor of two -- and the SIR rate drives most of the completion cost. Treat the hit-slot
+  numbers as the least reliable part of this file and run sensitivity on them.
+
+slots:
+  - index: 1
+    label: common
+    repeat: 4
+    outcomes:
+      - {rarity: "Common", probability: 1.0}
+  - index: 5
+    label: uncommon
+    repeat: 3
+    outcomes:
+      - {rarity: "Uncommon", probability: 1.0}
+  - index: 8
+    label: reverse_holo
+    repeat: 1
+    outcomes:
+      - {rarity: "Common",   probability: 0.55, variant: reverse_holofoil}
+      - {rarity: "Uncommon", probability: 0.35, variant: reverse_holofoil}
+      - {rarity: "Rare",     probability: 0.10, variant: reverse_holofoil}
+  - index: 9
+    label: rare
+    repeat: 1
+    outcomes:
+      - {rarity: "Rare",      probability: 0.75}
+      - {rarity: "Rare Holo", probability: 0.25}
+  - index: 10
+    label: hit
+    repeat: 1
+    outcomes:
+      - {rarity: "Double Rare",               probability: 0.200}
+      - {rarity: "Ultra Rare",                probability: 0.111}
+      - {rarity: "Illustration Rare",         probability: 0.083}
+      - {rarity: "Special Illustration Rare", probability: 0.0115}
+      - {rarity: "Hyper Rare",                probability: 0.010}
+      - {rarity: "Rare",                      probability: 0.5845}
+
+box_constraints:
+  - rarity: "Special Illustration Rare"
+    scope: box
+    min_per_box: 0
+    max_per_box: 2
+  - rarity: "Illustration Rare"
+    scope: box
+    min_per_box: 2
+    max_per_box: 5

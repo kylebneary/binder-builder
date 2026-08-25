@@ -1,0 +1,23 @@
+# Michi spread template. Slots are rectangles on a rows x (2*cols) spread grid.
+# kind: hero | card | insert | empty
+name: "Hero centre, mirrored wings"
+rows: 3
+cols: 3            # per page; the spread grid is 3 x 6
+requires_side_loading: true
+card_slots: 8
+slots:
+  - {row: 0, col: 0, kind: card}
+  - {row: 0, col: 1, kind: card}
+  - {row: 0, col: 2, kind: insert, col_span: 2, spans_gutter: true}
+  - {row: 0, col: 4, kind: card}
+  - {row: 0, col: 5, kind: card}
+  - {row: 1, col: 0, kind: empty}
+  - {row: 1, col: 1, kind: insert, col_span: 1}
+  - {row: 1, col: 2, kind: hero, col_span: 2, spans_gutter: true}
+  - {row: 1, col: 4, kind: insert, col_span: 1}
+  - {row: 1, col: 5, kind: empty}
+  - {row: 2, col: 0, kind: card}
+  - {row: 2, col: 1, kind: card}
+  - {row: 2, col: 2, kind: insert, col_span: 2, spans_gutter: true}
+  - {row: 2, col: 4, kind: card}
+  - {row: 2, col: 5, kind: card}
