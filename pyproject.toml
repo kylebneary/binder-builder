@@ -43,6 +43,12 @@ extend-exclude = ["backend/migrations/versions"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 
+# FastAPI's Depends()/Query()/etc. in argument defaults is the required pattern, not the B008
+# footgun that rule exists for (Typer's typer.Option() is the same story -- noqa'd inline since
+# there are only a couple of call sites, not enough to warrant a blanket exemption there too).
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body"]
+
 [tool.mypy]
 python_version = "3.12"
 plugins = ["pydantic.mypy"]

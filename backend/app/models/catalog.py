@@ -1,5 +1,6 @@
 """Card catalogue: sets, cards, printing variants, sealed products, prices."""
 from datetime import date
+from decimal import Decimal
 
 from sqlalchemy import (
     JSON,
@@ -97,7 +98,7 @@ class SealedProduct(Base, TimestampMixin):
     pack_config_id: Mapped[int | None] = mapped_column(
         ForeignKey("pull_rate_profile.id", ondelete="SET NULL")
     )
-    msrp: Mapped[float | None] = mapped_column(Numeric(10, 2))
+    msrp: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     contains_promos: Mapped[bool] = mapped_column(Boolean, default=False)
     image_url: Mapped[str | None] = mapped_column(String(512))
 
@@ -122,9 +123,9 @@ class PricePoint(Base):
     sub_type_name: Mapped[str] = mapped_column(String(64))
     observed_on: Mapped[date] = mapped_column(Date)
     source: Mapped[str] = mapped_column(String(32), default="tcgcsv")
-    low: Mapped[float | None] = mapped_column(Numeric(10, 2))
-    mid: Mapped[float | None] = mapped_column(Numeric(10, 2))
-    high: Mapped[float | None] = mapped_column(Numeric(10, 2))
-    market: Mapped[float | None] = mapped_column(Numeric(10, 2))
-    direct_low: Mapped[float | None] = mapped_column(Numeric(10, 2))
+    low: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    mid: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    high: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    market: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    direct_low: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     currency: Mapped[str] = mapped_column(String(3), default="USD")

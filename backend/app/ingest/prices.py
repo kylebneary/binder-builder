@@ -10,6 +10,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -21,6 +22,15 @@ from app.models import Card, CardVariant, PricePoint, Set
 from app.models.enums import Variant
 
 log = logging.getLogger(__name__)
+
+
+def _to_decimal(value: float | None) -> Decimal | None:
+    """PricePointDTO carries plain floats (the ingest boundary, per CLAUDE.md); the ORM column
+    is Decimal. Convert through str, never straight from float, to avoid binary
+    floating-point error creeping into a stored currency value."""
+    if value is None:
+        return None
+    return Decimal(str(value))
 
 # tcgcsv subTypeName -> Variant enum, per the verified list in docs/03-data-sources.md.
 # NOTE: that list does not include the Prismatic-era Poke Ball Holo / Master Ball Holo
@@ -75,11 +85,11 @@ def _upsert_price_point(db: Session, dto: PricePointDTO) -> None:
             source=dto.source,
         )
         db.add(row)
-    row.low = dto.low
-    row.mid = dto.mid
-    row.high = dto.high
-    row.market = dto.market
-    row.direct_low = dto.direct_low
+    row.low = _to_decimal(dto.low)
+    row.mid = _to_decimal(dto.mid)
+    row.high = _to_decimal(dto.high)
+    row.market = _to_decimal(dto.market)
+    row.direct_low = _to_decimal(dto.direct_low)
     row.currency = dto.currency
 
 
