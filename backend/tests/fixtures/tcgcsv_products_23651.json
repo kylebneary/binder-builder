@@ -1,0 +1,120 @@
+{
+  "results": [
+    {
+      "productId": 589855,
+      "name": "Alolan Diglett",
+      "cleanName": "Alolan Diglett",
+      "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/589855_200w.jpg",
+      "categoryId": 3,
+      "groupId": 23651,
+      "url": "https://www.tcgplayer.com/product/589855/pokemon-sv08-surging-sparks-alolan-diglett",
+      "modifiedOn": "2026-02-06T18:25:12.433",
+      "imageCount": 1,
+      "extendedData": [
+        {
+          "name": "Number",
+          "displayName": "Card Number",
+          "value": "122/191"
+        },
+        {
+          "name": "Rarity",
+          "displayName": "Rarity",
+          "value": "Common"
+        }
+      ]
+    },
+    {
+      "productId": 589856,
+      "name": "Alolan Dugtrio - 123/191",
+      "cleanName": "Alolan Dugtrio 123 191",
+      "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/589856_200w.jpg",
+      "categoryId": 3,
+      "groupId": 23651,
+      "url": "https://www.tcgplayer.com/product/589856/pokemon-sv08-surging-sparks-alolan-dugtrio-123-191",
+      "modifiedOn": "2026-05-18T19:57:47.797",
+      "imageCount": 1,
+      "extendedData": [
+        {
+          "name": "Number",
+          "displayName": "Card Number",
+          "value": "123/191"
+        },
+        {
+          "name": "Rarity",
+          "displayName": "Rarity",
+          "value": "Uncommon"
+        }
+      ]
+    },
+    {
+      "productId": 589857,
+      "name": "Alolan Dugtrio - 208/191",
+      "cleanName": "Alolan Dugtrio 208 191",
+      "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/589857_200w.jpg",
+      "categoryId": 3,
+      "groupId": 23651,
+      "url": "https://www.tcgplayer.com/product/589857/pokemon-sv08-surging-sparks-alolan-dugtrio-208-191",
+      "modifiedOn": "2026-04-13T23:45:57.887",
+      "imageCount": 1,
+      "extendedData": [
+        {
+          "name": "Number",
+          "displayName": "Card Number",
+          "value": "208/191"
+        },
+        {
+          "name": "Rarity",
+          "displayName": "Rarity",
+          "value": "Illustration Rare"
+        }
+      ]
+    },
+    {
+      "productId": 565599,
+      "name": "Surging Sparks Build & Battle Box",
+      "cleanName": "Surging Sparks Build and Battle Box",
+      "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/565599_200w.jpg",
+      "categoryId": 3,
+      "groupId": 23651,
+      "url": "https://www.tcgplayer.com/product/565599/pokemon-sv08-surging-sparks-surging-sparks-build-and-battle-box",
+      "modifiedOn": "2024-12-23T20:27:39.373",
+      "imageCount": 1,
+      "extendedData": []
+    },
+    {
+      "productId": 565602,
+      "name": "Surging Sparks Sleeved Booster Pack",
+      "cleanName": "Surging Sparks Sleeved Booster Pack",
+      "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/565602_200w.jpg",
+      "categoryId": 3,
+      "groupId": 23651,
+      "url": "https://www.tcgplayer.com/product/565602/pokemon-sv08-surging-sparks-surging-sparks-sleeved-booster-pack",
+      "modifiedOn": "2024-11-08T05:09:13.36",
+      "imageCount": 1,
+      "extendedData": []
+    },
+    {
+      "productId": 589858,
+      "name": "Alolan Exeggutor ex - 133/191",
+      "cleanName": "Alolan Exeggutor ex 133 191",
+      "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/589858_200w.jpg",
+      "categoryId": 3,
+      "groupId": 23651,
+      "url": "https://www.tcgplayer.com/product/589858/pokemon-sv08-surging-sparks-alolan-exeggutor-ex-133-191",
+      "modifiedOn": "2026-03-11T18:14:06.73",
+      "imageCount": 1,
+      "extendedData": [
+        {
+          "name": "Number",
+          "displayName": "Card Number",
+          "value": "133/191"
+        },
+        {
+          "name": "Rarity",
+          "displayName": "Rarity",
+          "value": "Double Rare"
+        }
+      ]
+    }
+  ]
+}
