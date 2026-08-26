@@ -9,8 +9,9 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import Card, CardVariant, CollectionItem, Set
+from app.models import Card, CardVariant, CollectionItem, SealedProduct, Set
 from app.services.prices import get_current_prices
+from app.services.simulate import resolve_pull_rate_profile
 
 
 @dataclass(slots=True)
@@ -63,6 +64,17 @@ class SetDetailView(SetView):
     cards: list[CardView] = field(default_factory=list)
     owned_count: int = 0
     needed_count: int = 0
+
+
+@dataclass(slots=True)
+class SealedProductView:
+    id: int
+    name: str
+    product_type: str
+    packs_per_unit: int | None
+    msrp: Decimal | None
+    market_price: Decimal | None
+    has_pull_rate_profile: bool
 
 
 def _to_set_view(row: Set) -> SetView:
@@ -160,3 +172,34 @@ def get_set_detail(db: Session, ptcg_set_id: str, collection_id: int) -> SetDeta
         owned_count=owned_count,
         needed_count=len(card_views) - owned_count,
     )
+
+
+def list_sealed_products(db: Session, ptcg_set_id: str) -> list[SealedProductView] | None:
+    """`has_pull_rate_profile` lets the simulate-goal UI grey out products that would just come
+    back in `run_search_and_cache`'s `unsimulatable` list instead of letting the user pick one
+    that visibly does nothing."""
+    set_row = db.execute(select(Set).where(Set.ptcg_set_id == ptcg_set_id)).scalar_one_or_none()
+    if set_row is None:
+        return None
+
+    products = db.execute(
+        select(SealedProduct).where(SealedProduct.set_id == set_row.id).order_by(SealedProduct.name)
+    ).scalars().all()
+    prices = get_current_prices(db, [p.tcgplayer_product_id for p in products])
+
+    views = []
+    for p in products:
+        current = prices.get((p.tcgplayer_product_id, "Normal"))
+        has_profile = bool(p.packs_per_unit) and resolve_pull_rate_profile(db, p) is not None
+        views.append(
+            SealedProductView(
+                id=p.id,
+                name=p.name,
+                product_type=str(p.product_type),
+                packs_per_unit=p.packs_per_unit,
+                msrp=p.msrp,
+                market_price=current["market"] if current else None,
+                has_pull_rate_profile=has_profile,
+            )
+        )
+    return views

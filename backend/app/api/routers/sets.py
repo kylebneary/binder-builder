@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
-from app.api.schemas import SetDetailOut, SetOut
+from app.api.schemas import SealedProductOut, SetDetailOut, SetOut
 from app.services import sets as sets_service
 from app.services.collection import get_or_create_default_collection
 
@@ -21,3 +21,11 @@ def get_set_detail(ptcg_set_id: str, db: Session = Depends(get_db)) -> SetDetail
     if detail is None:
         raise HTTPException(status_code=404, detail=f"Set {ptcg_set_id!r} not found")
     return SetDetailOut.model_validate(detail)
+
+
+@router.get("/{ptcg_set_id}/sealed-products", response_model=list[SealedProductOut])
+def list_sealed_products(ptcg_set_id: str, db: Session = Depends(get_db)) -> list[SealedProductOut]:
+    products = sets_service.list_sealed_products(db, ptcg_set_id)
+    if products is None:
+        raise HTTPException(status_code=404, detail=f"Set {ptcg_set_id!r} not found")
+    return [SealedProductOut.model_validate(p) for p in products]

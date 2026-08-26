@@ -55,6 +55,18 @@ class SetDetailOut(SetOut):
     needed_count: int
 
 
+class SealedProductOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    product_type: str
+    packs_per_unit: int | None
+    msrp: Decimal | None
+    market_price: Decimal | None
+    has_pull_rate_profile: bool
+
+
 class CollectionItemIn(BaseModel):
     card_variant_id: int
     quantity: int = 1
@@ -193,6 +205,8 @@ class SimResultOut(BaseModel):
     expected_cards_remaining: float
     n_trials: int
     seed: int
+    histogram_counts: list[int]
+    histogram_edges: list[float]
 
 
 class RankedStrategyOut(BaseModel):

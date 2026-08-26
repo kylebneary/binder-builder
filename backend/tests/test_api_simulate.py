@@ -106,6 +106,21 @@ def client():
     engine.dispose()
 
 
+def test_list_sealed_products_flags_pull_rate_coverage(client):
+    r = client.get("/api/v1/sets/sv8/sealed-products")
+    assert r.status_code == 200
+    products = r.json()
+    assert len(products) == 1
+    assert products[0]["name"] == "Booster Box"
+    assert products[0]["has_pull_rate_profile"] is True
+    assert float(products[0]["market_price"]) == 5.00
+
+
+def test_list_sealed_products_404_for_missing_set(client):
+    r = client.get("/api/v1/sets/does-not-exist/sealed-products")
+    assert r.status_code == 404
+
+
 def test_simulate_goal_returns_ranked_strategies_with_baseline(client):
     r = client.get("/api/v1/sets/sv8")
     set_id = r.json()["id"]

@@ -7,9 +7,11 @@ import GoalsPage from "./pages/GoalsPage";
 import SetDetailPage from "./pages/SetDetailPage";
 import SetListPage from "./pages/SetListPage";
 
-// recharts pulls in a large chunk (~400kB) that only the portfolio dashboard needs -- split it
-// out so the primary set-browsing/bulk-entry path doesn't pay for it.
+// recharts pulls in a large chunk (~400kB) that only the portfolio dashboard and the optimizer
+// results view need -- split both out so the primary set-browsing/bulk-entry path doesn't pay
+// for it.
 const PortfolioPage = lazy(() => import("./pages/PortfolioPage"));
+const GoalSimulatePage = lazy(() => import("./pages/GoalSimulatePage"));
 
 export default function App() {
   return (
@@ -35,12 +37,19 @@ export default function App() {
                 />
                 <Route path="/goals" element={<GoalsPage />} />
                 <Route path="/goals/:goalId" element={<GoalDetailPage />} />
+                <Route
+                  path="/goals/:goalId/simulate"
+                  element={
+                    <Suspense fallback={<p className="p-6 text-neutral-500">Loading...</p>}>
+                      <GoalSimulatePage />
+                    </Suspense>
+                  }
+                />
               </Routes>
             </>
           }
         />
       </Routes>
-      {/* TODO(phase-2.13): optimizer results view (strategy ranking, cost histogram) */}
       {/* TODO(phase-3.3): binder designer canvas */}
     </div>
   );

@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useDeleteGoal, useGoalDetail } from "../lib/queries";
 import { formatMoney } from "../lib/types";
 
@@ -23,12 +23,20 @@ export default function GoalDetailPage() {
             {goal.goal_type.replace("_", " ")}
           </p>
         </div>
-        <button
-          onClick={() => deleteGoal.mutate(goal.id, { onSuccess: () => navigate("/goals") })}
-          className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
-        >
-          Delete goal
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            to={`/goals/${goal.id}/simulate`}
+            className="rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700"
+          >
+            Run optimizer
+          </Link>
+          <button
+            onClick={() => deleteGoal.mutate(goal.id, { onSuccess: () => navigate("/goals") })}
+            className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
+          >
+            Delete goal
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
