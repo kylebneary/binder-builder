@@ -161,3 +161,55 @@ class GoalDetailOut(BaseModel):
     items: list[NeedItemOut]
     cost: SinglesCostOut
     unpriced_count: int
+
+
+class SimulateIn(BaseModel):
+    objective: str = "min_expected_cost"
+    n_trials: int = 20_000
+    seed: int = 0
+    sealed_product_ids: list[int] | None = None
+    # CostParams overrides -- unset fields fall back to CostParams' own defaults.
+    shipping_per_order: float | None = None
+    cards_per_order: int | None = None
+    sealed_shipping: float | None = None
+    sales_tax_rate: float | None = None
+    liquidation_rate: float | None = None
+    resale_floor: float | None = None
+    bulk_threshold: float | None = None
+
+
+class StrategyOut(BaseModel):
+    units: dict[int, int]  # sealed_product_id -> qty
+
+
+class SimResultOut(BaseModel):
+    mean: float
+    sd: float
+    p10: float
+    p50: float
+    p90: float
+    p95: float
+    p_complete_from_sealed: float
+    expected_cards_remaining: float
+    n_trials: int
+    seed: int
+
+
+class RankedStrategyOut(BaseModel):
+    simulation_run_id: int
+    strategy: StrategyOut
+    result: SimResultOut
+
+
+class UnsimulatableProductOut(BaseModel):
+    sealed_product_id: int
+    name: str
+    reason: str
+
+
+class SimulateResponseOut(BaseModel):
+    goal_id: int
+    objective: str
+    ranked: list[RankedStrategyOut]
+    unsimulatable: list[UnsimulatableProductOut]
+    uncovered_needed_price_sum: Decimal

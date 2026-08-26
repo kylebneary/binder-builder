@@ -45,13 +45,23 @@ class PoolBuildResult:
 
 
 def build_card_pool(
-    db: Session, set_id: int, profile: PullRateProfile, goal_id: int, collection_id: int
+    db: Session,
+    set_id: int,
+    profile: PullRateProfile,
+    goal_id: int,
+    collection_id: int,
+    price_field: str = "market",
 ) -> PoolBuildResult:
     """Pool scope = every card_variant in the set matching a slot_outcome's (rarity, variant), or
     any variant of a box_constraint's rarity (a box guarantee isn't scoped to one variant).
     `needed` mirrors services/goals.get_goal_need_list's definition: owned via `CollectionItem`,
     priced via `services/prices.get_current_prices`; an unpriced needed card is excluded from
     `needed` and counted in `unpriced_needed_count`, never silently priced at 0.
+
+    `price_field` selects which `current_price` column to price cards from -- "market" by
+    default; "low"/"high" build the alternate pools sensitivity analysis's price-basis
+    perturbation needs (docs/04-optimizer-spec.md), built here rather than in `sim/optimizer.py`
+    since only this DB-facing layer can call `get_current_prices`.
     """
     wanted_rarities = _profile_rarities(profile)
     outcome_pairs = {(o.rarity, o.variant) for slot in profile.slots for o in slot.outcomes}
@@ -97,7 +107,7 @@ def build_card_pool(
         if variant.tcgplayer_product_id is None or variant.tcgplayer_sub_type_name is None:
             return None
         current = prices.get((variant.tcgplayer_product_id, variant.tcgplayer_sub_type_name))
-        return current["market"] if current else None
+        return current[price_field] if current else None  # type: ignore[literal-required]
 
     required_by_variant = {v.card_variant_id: v.required_qty for v, _, _ in goal_rows}
 

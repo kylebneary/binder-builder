@@ -11,6 +11,7 @@ from app.config import get_settings
 from app.db import SessionLocal
 from app.ingest.cards import ingest_sets_and_cards
 from app.ingest.pokemontcg import PokemonTcgCardSource
+from app.ingest.pokemontcg_github import PokemonTcgGithubMirrorSource
 from app.ingest.prices import ingest_group_prices, resolve_group_set_pairs
 from app.ingest.pullrates import load_pull_rate_profiles, sync_pull_rates_to_db
 from app.ingest.sealed_map import (
@@ -20,12 +21,16 @@ from app.ingest.sealed_map import (
 )
 from app.ingest.set_mapping import load_set_map, sync_set_map_to_db
 from app.ingest.tcgcsv import TcgCsvPriceSource
+from app.models import SealedProduct
 from app.models import Set as SetModel
 from app.models.enums import GoalType
 from app.services import goals as goals_service
 from app.services.collection import get_or_create_default_collection
 from app.services.csv_export import export_collection_csv
 from app.services.csv_import import apply_import, dry_run_import, parse_csv
+from app.services.simulation_runs import run_search_and_cache
+from app.sim.optimizer import Objective
+from app.sim.types import CostParams
 
 app = typer.Typer(help="binder-builder")
 ingest_app = typer.Typer(help="Data ingestion")
@@ -50,13 +55,30 @@ def ingest_cards(
         None, "--set", help="ptcg_set_id, e.g. sv8. Repeatable."
     ),
     all_sets: bool = typer.Option(False, "--all", help="Ingest every set from pokemontcg.io."),
+    source_name: str = typer.Option(
+        "pokemontcg",
+        "--source",
+        help=(
+            "Card metadata source: 'pokemontcg' (live API, default) or 'github-mirror' "
+            "(PokemonTCG/pokemon-tcg-data GitHub mirror -- use when the live API is hard-down "
+            "for a set, see docs/03-data-sources.md)."
+        ),
+    ),
 ) -> None:
     """Pull card metadata from pokemontcg.io."""
     if bool(set_id) == all_sets:
         console.print("[red]Pass exactly one of --set (repeatable) or --all.[/red]")
         raise typer.Exit(code=1)
 
-    source = PokemonTcgCardSource()
+    if source_name == "pokemontcg":
+        source: PokemonTcgCardSource | PokemonTcgGithubMirrorSource = PokemonTcgCardSource()
+    elif source_name == "github-mirror":
+        source = PokemonTcgGithubMirrorSource()
+    else:
+        console.print(
+            f"[red]Unknown --source {source_name!r}. Use 'pokemontcg' or 'github-mirror'.[/red]"
+        )
+        raise typer.Exit(code=1)
     db = SessionLocal()
     try:
         results = ingest_sets_and_cards(db, source, None if all_sets else list(set_id or []))
@@ -365,7 +387,65 @@ def sim_run(
     seed: int = 0,
 ) -> None:
     """Optimize a completion goal and print the ranked strategies."""
-    raise NotImplementedError  # TODO(phase-2.10)
+    try:
+        parsed_objective = Objective(objective)
+    except ValueError:
+        console.print(
+            f"[red]Unknown objective {objective!r}. Use one of: "
+            f"{', '.join(o.value for o in Objective)}.[/red]"
+        )
+        raise typer.Exit(code=1) from None
+
+    db = SessionLocal()
+    try:
+        try:
+            result = run_search_and_cache(
+                db, goal_id, parsed_objective, CostParams(), n_trials=trials, seed=seed
+            )
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(code=1) from exc
+
+        product_names = {
+            p.id: p.name
+            for p in db.execute(select(SealedProduct)).scalars().all()
+        }
+    finally:
+        db.close()
+
+    if result.unsimulatable:
+        console.print("[yellow]Not simulatable:[/yellow]")
+        for u in result.unsimulatable:
+            console.print(f"  {u['name']} -- {u['reason']}")
+
+    baseline = next((r for r in result.runs if not r.strategy_json), None)
+    baseline_mean = baseline.results_json["mean"] if baseline else None
+
+    console.print(f"Goal {goal_id} -- objective: {parsed_objective.value}")
+    for run in result.runs:
+        if run.strategy_json:
+            label = ", ".join(
+                f"{qty}x {product_names.get(int(pid), pid)}"
+                for pid, qty in run.strategy_json.items()
+            )
+        else:
+            label = "singles only"
+        r = run.results_json
+        delta = (
+            f" ({r['mean'] - baseline_mean:+.2f} vs. singles)"
+            if baseline_mean is not None and run.strategy_json
+            else ""
+        )
+        console.print(
+            f"  {label}: mean ${r['mean']:.2f}, p90 ${r['p90']:.2f}{delta}"
+        )
+
+    if result.uncovered_needed_price_sum:
+        console.print(
+            f"[yellow]${result.uncovered_needed_price_sum} of needed cards are outside this "
+            "profile's rarity coverage and not reflected above -- add it by hand to any total "
+            "you use.[/yellow]"
+        )
 
 
 if __name__ == "__main__":

@@ -1,11 +1,26 @@
+from dataclasses import replace
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
-from app.api.schemas import GoalDetailOut, GoalIn, GoalOut
+from app.api.schemas import (
+    GoalDetailOut,
+    GoalIn,
+    GoalOut,
+    RankedStrategyOut,
+    SimResultOut,
+    SimulateIn,
+    SimulateResponseOut,
+    StrategyOut,
+    UnsimulatableProductOut,
+)
 from app.models.enums import Condition, GoalType
 from app.services import goals as goals_service
 from app.services.collection import get_or_create_default_collection
+from app.services.simulation_runs import run_search_and_cache
+from app.sim.optimizer import Objective
+from app.sim.types import CostParams
 
 router = APIRouter(prefix="/goals", tags=["goals"])
 
@@ -47,3 +62,51 @@ def delete_goal(goal_id: int, db: Session = Depends(get_db)) -> None:
     deleted = goals_service.delete_goal(db, goal_id)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Goal {goal_id} not found")
+
+
+@router.post("/{goal_id}/simulate", response_model=SimulateResponseOut)
+def simulate_goal(
+    goal_id: int, body: SimulateIn, db: Session = Depends(get_db)
+) -> SimulateResponseOut:
+    try:
+        objective = Objective(body.objective)
+    except ValueError as exc:
+        detail = f"Unknown objective {body.objective!r}"
+        raise HTTPException(status_code=422, detail=detail) from exc
+
+    overrides = body.model_dump(
+        exclude={"objective", "n_trials", "seed", "sealed_product_ids"}, exclude_none=True
+    )
+    params = replace(CostParams(), **overrides)
+    sealed_product_ids = set(body.sealed_product_ids) if body.sealed_product_ids else None
+
+    try:
+        result = run_search_and_cache(
+            db,
+            goal_id,
+            objective,
+            params,
+            n_trials=body.n_trials,
+            seed=body.seed,
+            sealed_product_ids=sealed_product_ids,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    ranked = [
+        RankedStrategyOut(
+            simulation_run_id=run.id,
+            strategy=StrategyOut(units=run.strategy_json),
+            result=SimResultOut(
+                **{k: v for k, v in run.results_json.items() if k in SimResultOut.model_fields}
+            ),
+        )
+        for run in result.runs
+    ]
+    return SimulateResponseOut(
+        goal_id=goal_id,
+        objective=objective.value,
+        ranked=ranked,
+        unsimulatable=[UnsimulatableProductOut(**u) for u in result.unsimulatable],
+        uncovered_needed_price_sum=result.uncovered_needed_price_sum,
+    )

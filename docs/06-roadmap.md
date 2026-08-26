@@ -110,9 +110,9 @@ cost distribution and a sensitivity chart, and the analytic-agreement test passe
 - [x] 2.7 `sim/montecarlo.py` — vectorised NumPy engine, box constraints, seeded RNG.
 - [x] 2.8 Test suite from `docs/04-optimizer-spec.md` (all six categories).
 - [x] 2.9 Performance pass to the 100k-trials-in-2s target.
-- [ ] 2.10 Strategy search: grid for ≤2 product types, greedy for more.
-- [ ] 2.11 Objectives: expected cost, p90 cost, budget-constrained completion.
-- [ ] 2.12 `simulation_run` persistence and cache.
+- [x] 2.10 Strategy search: grid for ≤2 product types, greedy for more.
+- [x] 2.11 Objectives: expected cost, p90 cost, budget-constrained completion.
+- [x] 2.12 `simulation_run` persistence and cache.
 - [ ] 2.13 UI: results view — strategy ranking, cost histogram, singles baseline delta,
       assumptions panel with inline editing.
 - [ ] 2.14 Sensitivity/tornado analysis and the "recommendation is not robust" warning.
@@ -253,6 +253,51 @@ owned-card exclusion, profile resolution (default vs. explicit override), and bo
 (including missing `packs_per_unit` and `box_constraint` mapping). Full suite: 130 passing (1
 slow test deselected by default).
 
+**2.10-2.12 shipped (2026-08-25):** `sim/optimizer.py` implements `search` (ranked
+`(Strategy, SimResult)` pairs, always including the singles-only baseline; exhaustive grid for
+<=2 sealed products, greedy marginal analysis + a +-1 local-search polish for 3+) and
+`sensitivity` (tornado analysis: top-3 needed chase-rarity pull rates at +/-50%,
+`liquidation_rate` 0.5-0.85, sealed unit price +/-20%; `robust: bool` flags whether any
+perturbation flips which of the strategy/singles-baseline is cheaper). Two precision/scope
+decisions worth flagging:
+- **Two-phase precision in `search`.** Candidate generation and initial ranking run at a
+  lower `n_trials` (capped at 5,000) for speed; the top 3 candidates plus the baseline are
+  re-simulated at the caller's full `n_trials` before the final ranking is returned. A real
+  trade-off (coarse-phase noise could misorder two very close candidates before refinement
+  corrects it), documented in the function's docstring rather than silent.
+- **Price-basis (low/market/high) sensitivity is deferred to Milestone D.** `build_card_pool`
+  gained a `price_field` parameter so the service layer can build alternate pools for this later;
+  `sim/optimizer.py` can't call `get_current_prices` itself (DB-oblivious per
+  `docs/01-architecture.md`), and wiring that orchestration in now would anticipate UI work not
+  yet built. The other three sensitivity factors ship now since they're self-contained within
+  `sim/`.
+
+New `services/simulation_runs.py` is the caching/persistence layer: `compute_cache_key` hashes
+`(goal, strategy, params, n_trials, seed, price_date, profile_version)` per the spec's "cache
+aggressively" note -- one `simulation_run` row per evaluated strategy point, so a repeated search
+over an already-cached point is free. `price_date` uses the global max `price_point.observed_on`
+(the daily price job ingests everything in one batch, so this is a fair proxy) rather than
+per-product dates. `run_search_and_cache` resolves every sealed product for the goal's set that
+shares its profile with the set's `is_default` profile into a `BoxSpec`, reporting (never
+silently dropping) any that aren't simulatable and why.
+
+New `POST /api/v1/goals/{goal_id}/simulate` (body: `objective`, `n_trials`, `seed`,
+`sealed_product_ids`, optional `CostParams` overrides) and `bb sim run <goal_id>` both wrap
+`run_search_and_cache`. Verified end-to-end against the real ingested DB: `bb sim run 1` (the
+existing `sv8` master-set goal) against the already-curated real `packs_per_unit` sealed products
+for that set (single-pack products; the Booster Box itself is still uncurated in
+`data/sealed_map.yaml`, per the Phase 1 backlog) -- singles-only baseline reported **$1338.92
+mean**, exactly matching the plain need-list total from the 2.1-2.4 shipped note above, confirming
+the `uncovered_needed_price_sum` reconciliation design holds in practice. Every real sealed
+product for `sv8` came back slightly more expensive than singles-only, consistent with the spec's
+"Expected finding" that sealed usually loses.
+
+13 new tests: `test_sim_optimizer.py` (baseline inclusion, grid picks the cheaper synthetic
+strategy, greedy activates at 3+ products, results sorted by objective, sensitivity reports
+`robust`/factors), `test_service_simulation_runs.py` (persistence, cache hit/miss on changed
+params, unsimulatable-product reporting), plus an API smoke test in the new
+`test_api_simulate.py`. Full suite: 147 passing (1 slow deselected).
+
 ## Phase 3 — Binder designer
 
 **Branch:** `feat/phase-3-binder`
@@ -286,27 +331,30 @@ pockets.
 ## Suggested next session for Claude Code
 
 Phases 0 and 1 are done (see the outstanding real-data step noted under Phase 1, above -- do that
-by hand or in the next session before trusting the numbers). Phase 2's 2.1-2.9 are all done (see
-the notes under Phase 2, above): goal creation, the need list, its plain singles cost, ten real
-pull-rate profiles, and both the closed-form `sim/analytic.py` oracle and the vectorised
-`sim/montecarlo.py` engine (box constraints, seeded RNG, the 100k-trials-in-2s performance bar
-met and benchmarked). `services/simulate.py` is the DB <-> sim boundary that builds `CardPool`/
-`BoxSpec` for a goal and a sealed product. Full suite: 130 passing.
+by hand or in the next session before trusting the numbers). Phase 2's 2.1-2.12 are all done (see
+the notes under Phase 2, above): goal creation and cost model, ten real pull-rate profiles, the
+closed-form and vectorised simulation engines (100k-trials-in-2s performance bar met and
+benchmarked), and strategy search/objectives/persistence (`sim/optimizer.py`,
+`services/simulation_runs.py`, `POST /goals/{id}/simulate`, `bb sim run`). Verified end-to-end
+against the real DB -- see the 2.10-2.12 note above for the `bb sim run 1` output. Full suite:
+147 passing (1 slow deselected).
 
-Next is Milestone B: 2.10 (`sim/optimizer.py`'s `search` -- grid for <=2 sealed products, greedy
-for more, always including the singles-only baseline), 2.11 (the four objectives already stubbed
-as the `Objective` enum), and 2.12 (`simulation_run` persistence/caching, keyed on
-`(goal, strategy, params, n_trials, seed, price_date, profile_version)`). This is the layer that
-turns "can simulate one strategy" into "tell me what to buy" -- wire it into the already-stubbed
-`bb sim run <goal_id>` CLI command and a new `POST /goals/{id}/simulate` API route. Remember
-`build_card_pool`'s `uncovered_needed_price_sum` (2.7's note above) needs to be added as a flat
-offset to every strategy's reported NetCost so totals stay reconciled with the plain need-list
-view -- easy to forget since it doesn't show up in any Milestone A test (none of the real profiles
-have an uncovered-rarity gap today).
+Next is Milestone C (2.13): the results UI. A small backend addition first --
+`GET /sets/{ptcg_set_id}/sealed-products` (id, name, product_type, packs_per_unit, price,
+`has_pull_rate_profile`) so the picker can grey out non-simulatable products instead of letting
+the user pick one that comes back in `unsimulatable`. Then `frontend/src/pages/GoalSimulatePage.tsx`
+at `/goals/:goalId/simulate`: sealed-product picker, objective selector, "Run optimizer" button
+posting to the now-real `/goals/{id}/simulate`, and a results view (ranked `StatCard`s reusing
+the pattern from `GoalDetailPage.tsx`/`PortfolioPage.tsx`, a cost histogram via `recharts`
+already used in `PortfolioPage.tsx`, and an assumptions panel). Verify in a real headless-Chromium
+browser (Playwright, as used earlier this session), not just via the API.
 
-No real `box_constraint` data exists yet for exercising 2.7's guarantee code path against
-anything but a synthetic fixture -- worth researching one set for this, or accepting
-synthetic-only coverage until a source turns up. This doesn't block Milestone B.
+No real `box_constraint` data exists yet for exercising `sim/montecarlo.py`'s guarantee code path
+against anything but a synthetic fixture -- worth researching one set for this, or accepting
+synthetic-only coverage until a source turns up. This doesn't block Milestone C. Separately,
+`data/sealed_map.yaml` still has zero curated `booster_box` entries (only single-pack products
+are classified) -- worth curating at least one real booster box for a profiled set so `bb sim
+run`'s output includes the product collectors actually ask about.
 
 Separately, if picking up pull-rate authoring again: the Trainer-Gallery/Galarian-Gallery schema
 gap (see the Phase 2 note above and `docs/02-data-model.md`'s Pull-rate model section) blocks
