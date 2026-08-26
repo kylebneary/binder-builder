@@ -9,6 +9,8 @@ import type {
   PortfolioSummaryOut,
   PortfolioValuePointOut,
   SealedProductOut,
+  SensitivityIn,
+  SensitivityOut,
   SetDetailOut,
   SetOut,
   SimulateIn,
@@ -113,6 +115,16 @@ export function useRunSimulation(goalId: number | undefined) {
   return useMutation({
     mutationFn: (body: SimulateIn) =>
       api<SimulateResponseOut>(`/goals/${goalId}/simulate`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+  });
+}
+
+export function useRunSensitivity(goalId: number | undefined) {
+  return useMutation({
+    mutationFn: (body: SensitivityIn) =>
+      api<SensitivityOut>(`/goals/${goalId}/sensitivity`, {
         method: "POST",
         body: JSON.stringify(body),
       }),

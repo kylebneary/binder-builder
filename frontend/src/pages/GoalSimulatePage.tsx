@@ -1,29 +1,60 @@
 import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import {
   Bar,
   BarChart,
   CartesianGrid,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import { useGoalDetail, useRunSimulation, useSealedProducts, useSets } from "../lib/queries";
+import {
+  useGoalDetail,
+  useRunSensitivity,
+  useRunSimulation,
+  useSealedProducts,
+  useSets,
+} from "../lib/queries";
 import type {
   Objective,
   RankedStrategyOut,
   SealedProductOut,
+  SensitivityOut,
   SimulateIn,
 } from "../lib/types";
-import { formatMoney } from "../lib/types";
+import { formatMoney, parseMoney } from "../lib/types";
+import { tooltipStyles, useChartColors } from "../lib/chartTheme";
+import {
+  AccentPanel,
+  Button,
+  Callout,
+  ErrorState,
+  Field,
+  Input,
+  LoadingState,
+  Page,
+  PageHeader,
+  Panel,
+  SectionLabel,
+  Select,
+  Table,
+  Tag,
+  Td,
+  Th,
+  Tr,
+} from "../components/ui";
 
 const OBJECTIVES: { value: Objective; label: string }[] = [
   { value: "min_expected_cost", label: "Minimize expected cost" },
   { value: "min_p90_cost", label: "Minimize worst-case (p90) cost" },
 ];
 
-function strategyLabel(strategy: RankedStrategyOut["strategy"], products: SealedProductOut[]): string {
+function strategyLabel(
+  strategy: RankedStrategyOut["strategy"],
+  products: SealedProductOut[],
+): string {
   const entries = Object.entries(strategy.units);
   if (entries.length === 0) return "Singles only";
   return entries
@@ -45,6 +76,7 @@ export default function GoalSimulatePage() {
   );
   const { data: sealedProducts, isLoading: productsLoading } = useSealedProducts(ptcgSetId);
   const runSimulation = useRunSimulation(id);
+  const runSensitivity = useRunSensitivity(id);
 
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [objective, setObjective] = useState<Objective>("min_expected_cost");
@@ -67,191 +99,396 @@ export default function GoalSimulatePage() {
       resale_floor: resaleFloor,
       sealed_product_ids: selectedIds.size > 0 ? Array.from(selectedIds) : undefined,
     };
-    runSimulation.mutate(body);
+    runSimulation.mutate(body, { onSuccess: () => runSensitivity.reset() });
   }
 
-  if (goalLoading) return <p className="p-6 text-neutral-500">Loading...</p>;
-  if (!goal) return <p className="p-6 text-neutral-500">Goal not found.</p>;
+  function checkSensitivity(best: RankedStrategyOut) {
+    const unitsAsNumbers: Record<number, number> = {};
+    for (const [pid, qty] of Object.entries(best.strategy.units)) {
+      unitsAsNumbers[Number(pid)] = qty;
+    }
+    runSensitivity.mutate({
+      sealed_product_ids: unitsAsNumbers,
+      liquidation_rate: liquidationRate,
+      resale_floor: resaleFloor,
+    });
+  }
+
+  if (goalLoading) return <LoadingState />;
+  if (!goal) return <ErrorState message="Goal not found." />;
 
   const response = runSimulation.data;
   const baseline = response?.ranked.find((r) => Object.keys(r.strategy.units).length === 0);
   const best = response?.ranked[0];
+  const products = sealedProducts ?? [];
 
   return (
-    <div className="mx-auto max-w-4xl p-6">
-      <div className="mb-4">
-        <Link to={`/goals/${goal.id}`} className="text-sm text-neutral-500 hover:underline">
-          ← {goal.name}
-        </Link>
-        <h1 className="text-xl font-semibold">Run optimizer</h1>
-      </div>
+    <Page>
+      <PageHeader
+        title="Completion solver"
+        subtitle={`${goal.cost.n_cards} cards left · ${goal.name}`}
+        back={{ to: `/goals/${goal.id}`, label: goal.name }}
+      />
 
-      <div className="rounded-lg border border-neutral-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-medium text-neutral-700">Sealed products to consider</h2>
-        {productsLoading ? (
-          <p className="text-sm text-neutral-400">Loading sealed products...</p>
-        ) : !sealedProducts || sealedProducts.length === 0 ? (
-          <p className="text-sm text-neutral-400">No sealed products found for this set.</p>
-        ) : (
-          <div className="max-h-64 space-y-1 overflow-y-auto">
-            {sealedProducts.map((p) => (
-              <label
-                key={p.id}
-                className={`flex items-center justify-between rounded px-2 py-1.5 text-sm ${
-                  p.has_pull_rate_profile ? "" : "opacity-40"
-                }`}
-              >
-                <span className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    disabled={!p.has_pull_rate_profile}
-                    checked={selectedIds.has(p.id)}
-                    onChange={() => toggle(p.id)}
-                  />
-                  {p.name}
-                  {!p.has_pull_rate_profile && (
-                    <span className="text-xs text-neutral-400">(no pull-rate data)</span>
-                  )}
-                </span>
-                <span className="text-neutral-500">{formatMoney(p.market_price)}</span>
-              </label>
-            ))}
+      <div className="grid gap-4 lg:grid-cols-12">
+        {/* ------------------------------------------------ sealed product picker */}
+        <Panel className="flex flex-col p-4 lg:col-span-7">
+          <SectionLabel className="mb-3">Sealed products to consider</SectionLabel>
+          {productsLoading ? (
+            <p className="text-[12.5px] text-ink-3">Loading sealed products...</p>
+          ) : products.length === 0 ? (
+            <p className="text-[12.5px] text-ink-3">No sealed products found for this set.</p>
+          ) : (
+            <div className="-mx-1 max-h-72 space-y-0.5 overflow-y-auto px-1">
+              {products.map((p) => {
+                const disabled = !p.has_pull_rate_profile;
+                return (
+                  <label
+                    key={p.id}
+                    className={`flex items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-[13px] transition-colors ${
+                      disabled ? "opacity-45" : "cursor-pointer hover:bg-inset"
+                    }`}
+                  >
+                    <span className="flex min-w-0 items-center gap-2.5">
+                      <input
+                        type="checkbox"
+                        disabled={disabled}
+                        checked={selectedIds.has(p.id)}
+                        onChange={() => toggle(p.id)}
+                        className="h-3.5 w-3.5 flex-none accent-[var(--accent)]"
+                      />
+                      <span className="truncate text-ink-2">{p.name}</span>
+                      {disabled && <Tag>NO PULL RATES</Tag>}
+                    </span>
+                    <span className="flex-none font-mono text-[12px] text-ink-3">
+                      {formatMoney(p.market_price)}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+          <p className="mt-3 text-[11.5px] leading-[1.55] text-ink-4">
+            Leave everything unchecked to consider every simulatable product for this set.
+          </p>
+        </Panel>
+
+        {/* ---------------------------------------------------------- constraints */}
+        <Panel className="flex flex-col gap-3.5 p-4 lg:col-span-5">
+          <SectionLabel>Constraints</SectionLabel>
+          <Field label="Objective">
+            <Select
+              value={objective}
+              onChange={(e) => setObjective(e.target.value as Objective)}
+            >
+              {OBJECTIVES.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Liquidation rate">
+              <Input
+                type="number"
+                step="0.05"
+                min="0"
+                max="1"
+                value={liquidationRate}
+                onChange={(e) => setLiquidationRate(Number(e.target.value))}
+              />
+            </Field>
+            <Field label="Resale floor ($)">
+              <Input
+                type="number"
+                step="0.5"
+                min="0"
+                value={resaleFloor}
+                onChange={(e) => setResaleFloor(Number(e.target.value))}
+              />
+            </Field>
           </div>
-        )}
-        <p className="mt-2 text-xs text-neutral-400">
-          Leave everything unchecked to consider every simulatable product for this set.
-        </p>
+          <Button onClick={runOptimizer} disabled={runSimulation.isPending} className="mt-1 w-full">
+            {runSimulation.isPending ? "Solving..." : "Solve"}
+          </Button>
+          <p className="text-[10.5px] leading-[1.5] text-ink-4">
+            Pull rates are community estimates, not published odds — read every number below as an
+            estimate with a confidence interval.
+          </p>
+        </Panel>
       </div>
-
-      <div className="mt-4 grid grid-cols-1 gap-4 rounded-lg border border-neutral-200 bg-white p-4 sm:grid-cols-3">
-        <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Objective</span>
-          <select
-            value={objective}
-            onChange={(e) => setObjective(e.target.value as Objective)}
-            className="w-full rounded border border-neutral-300 px-2 py-1"
-          >
-            {OBJECTIVES.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Liquidation rate</span>
-          <input
-            type="number"
-            step="0.05"
-            min="0"
-            max="1"
-            value={liquidationRate}
-            onChange={(e) => setLiquidationRate(Number(e.target.value))}
-            className="w-full rounded border border-neutral-300 px-2 py-1"
-          />
-        </label>
-        <label className="text-sm">
-          <span className="mb-1 block text-neutral-600">Resale floor ($)</span>
-          <input
-            type="number"
-            step="0.5"
-            min="0"
-            value={resaleFloor}
-            onChange={(e) => setResaleFloor(Number(e.target.value))}
-            className="w-full rounded border border-neutral-300 px-2 py-1"
-          />
-        </label>
-      </div>
-
-      <button
-        onClick={runOptimizer}
-        disabled={runSimulation.isPending}
-        className="mt-4 rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50"
-      >
-        {runSimulation.isPending ? "Running..." : "Run optimizer"}
-      </button>
 
       {runSimulation.isError && (
-        <p className="mt-3 text-sm text-red-600">{(runSimulation.error as Error).message}</p>
+        <Callout tone="danger" className="mt-4">
+          {(runSimulation.error as Error).message}
+        </Callout>
       )}
 
       {response && (
-        <div className="mt-8">
+        <div className="mt-8 flex flex-col gap-4">
           {response.unsimulatable.length > 0 && (
-            <p className="mb-4 text-xs text-amber-600">
+            <Callout>
               Not simulatable:{" "}
               {response.unsimulatable.map((u) => `${u.name} (${u.reason})`).join(", ")}
-            </p>
+            </Callout>
           )}
           {Number(response.uncovered_needed_price_sum) > 0 && (
-            <p className="mb-4 text-xs text-amber-600">
-              {formatMoney(response.uncovered_needed_price_sum)} of needed cards fall outside
-              this profile's pull-rate coverage and aren't reflected in the costs below.
-            </p>
+            <Callout>
+              {formatMoney(response.uncovered_needed_price_sum)} of needed cards fall outside this
+              profile&rsquo;s pull-rate coverage and aren&rsquo;t reflected in the costs below.
+            </Callout>
           )}
 
-          <h2 className="mb-3 text-sm font-medium text-neutral-700">Ranked strategies</h2>
-          <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
-            <table className="w-full text-sm">
-              <thead className="border-b border-neutral-200 bg-neutral-50 text-left text-xs uppercase text-neutral-500">
-                <tr>
-                  <th className="px-3 py-2">Strategy</th>
-                  <th className="px-3 py-2 text-right">Mean cost</th>
-                  <th className="px-3 py-2 text-right">P90 cost</th>
-                  <th className="px-3 py-2 text-right">Complete from sealed</th>
-                  <th className="px-3 py-2 text-right">vs. singles</th>
-                </tr>
-              </thead>
-              <tbody>
-                {response.ranked.map((item) => {
-                  const delta =
-                    baseline && item !== baseline
-                      ? item.result.mean - baseline.result.mean
-                      : null;
-                  return (
-                    <tr
-                      key={item.simulation_run_id}
-                      className={`border-b border-neutral-100 last:border-0 ${
-                        item === best ? "bg-emerald-50" : ""
+          {best && (
+            <CheapestPath
+              best={best}
+              baseline={baseline}
+              products={products}
+              nTrials={best.result.n_trials}
+            />
+          )}
+
+          <div>
+            <h2 className="mb-3 text-[14px] font-semibold text-ink">Ranked strategies</h2>
+            <Table
+              head={
+                <>
+                  <Th>Strategy</Th>
+                  <Th className="text-right">Mean cost</Th>
+                  <Th className="text-right">P90 cost</Th>
+                  <Th className="text-right">Complete from sealed</Th>
+                  <Th className="text-right">vs. singles</Th>
+                </>
+              }
+            >
+              {response.ranked.map((item) => {
+                const delta =
+                  baseline && item !== baseline ? item.result.mean - baseline.result.mean : null;
+                return (
+                  <Tr key={item.simulation_run_id} highlight={item === best}>
+                    <Td className="font-medium text-ink">
+                      {strategyLabel(item.strategy, products)}
+                    </Td>
+                    <Td className="text-right font-mono text-[12px] font-medium text-ink">
+                      ${item.result.mean.toFixed(2)}
+                    </Td>
+                    <Td className="text-right font-mono text-[12px]">
+                      ${item.result.p90.toFixed(2)}
+                    </Td>
+                    <Td className="text-right font-mono text-[12px]">
+                      {(item.result.p_complete_from_sealed * 100).toFixed(0)}%
+                    </Td>
+                    <Td
+                      className={`text-right font-mono text-[12px] ${
+                        delta !== null && delta < 0 ? "text-accent-text" : "text-ink-3"
                       }`}
                     >
-                      <td className="px-3 py-2 font-medium text-neutral-800">
-                        {strategyLabel(item.strategy, sealedProducts ?? [])}
-                      </td>
-                      <td className="px-3 py-2 text-right text-neutral-700">
-                        ${item.result.mean.toFixed(2)}
-                      </td>
-                      <td className="px-3 py-2 text-right text-neutral-600">
-                        ${item.result.p90.toFixed(2)}
-                      </td>
-                      <td className="px-3 py-2 text-right text-neutral-600">
-                        {(item.result.p_complete_from_sealed * 100).toFixed(0)}%
-                      </td>
-                      <td className="px-3 py-2 text-right text-neutral-600">
-                        {delta === null ? "—" : `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}`}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                      {delta === null ? "—" : `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}`}
+                    </Td>
+                  </Tr>
+                );
+              })}
+            </Table>
           </div>
 
           {best && (
-            <div className="mt-8 rounded-lg border border-neutral-200 bg-white p-4">
-              <h2 className="mb-3 text-sm font-medium text-neutral-700">
-                Cost distribution -- {strategyLabel(best.strategy, sealedProducts ?? [])}
-              </h2>
+            <Panel className="p-4">
+              <SectionLabel className="mb-4">
+                Cost distribution · {strategyLabel(best.strategy, products)}
+              </SectionLabel>
               <CostHistogram result={best.result} />
-            </div>
+            </Panel>
+          )}
+
+          {best && (
+            <Panel className="p-4">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <SectionLabel>
+                  Sensitivity · {strategyLabel(best.strategy, products)} vs. singles
+                </SectionLabel>
+                <Button
+                  variant="secondary"
+                  onClick={() => checkSensitivity(best)}
+                  disabled={runSensitivity.isPending}
+                  className="px-3 py-1.5 text-[12px]"
+                >
+                  {runSensitivity.isPending ? "Checking..." : "Check sensitivity"}
+                </Button>
+              </div>
+              {runSensitivity.isError && (
+                <Callout tone="danger">{(runSensitivity.error as Error).message}</Callout>
+              )}
+              {runSensitivity.data && <SensitivityPanel sensitivity={runSensitivity.data} />}
+              {!runSensitivity.data && !runSensitivity.isPending && !runSensitivity.isError && (
+                <p className="text-[12.5px] leading-[1.6] text-ink-3">
+                  Perturbs pull rates, liquidation rate, sealed price, and price basis by plausible
+                  amounts to check whether this recommendation still holds.
+                </p>
+              )}
+            </Panel>
           )}
         </div>
       )}
+    </Page>
+  );
+}
+
+/** The mockup's "cheapest path" hero: one big mono number, the singles baseline it beats, and
+ *  the sealed units that make it up. */
+function CheapestPath({
+  best,
+  baseline,
+  products,
+  nTrials,
+}: {
+  best: RankedStrategyOut;
+  baseline?: RankedStrategyOut;
+  products: SealedProductOut[];
+  nTrials: number;
+}) {
+  const units = Object.entries(best.strategy.units);
+  const saving = baseline ? baseline.result.mean - best.result.mean : null;
+
+  return (
+    <AccentPanel className="flex flex-col gap-4 p-5">
+      <div className="flex flex-col gap-1">
+        <SectionLabel className="text-accent-text">Cheapest path</SectionLabel>
+        <span className="font-mono text-[30px] font-bold leading-none tracking-[-1px] text-ink">
+          ${best.result.mean.toFixed(2)}
+        </span>
+        {baseline && (
+          <span className="text-[11.5px] text-ink-3">
+            vs ${baseline.result.mean.toFixed(2)} buying every card as a single
+            {saving !== null && saving > 0 ? ` · saves $${saving.toFixed(2)}` : ""}
+          </span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-3 gap-3 border-t border-accent-line pt-3.5">
+        <HeroStat label="P50" value={`$${best.result.p50.toFixed(0)}`} />
+        <HeroStat label="P90" value={`$${best.result.p90.toFixed(0)}`} />
+        <HeroStat
+          label="Complete from sealed"
+          value={`${(best.result.p_complete_from_sealed * 100).toFixed(0)}%`}
+        />
+      </div>
+
+      {units.length > 0 && (
+        <div className="flex flex-col gap-2 border-t border-accent-line pt-3.5">
+          {units.map(([pid, qty]) => {
+            const product = products.find((p) => p.id === Number(pid));
+            const unitPrice = parseMoney(product?.market_price ?? null);
+            return (
+              <div key={pid} className="flex items-center gap-2.5">
+                <span aria-hidden="true" className="h-6 w-[3px] flex-none rounded-sm bg-warn" />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-[12.5px] font-medium text-ink">
+                    {product?.name ?? `Product ${pid}`} &times;{qty}
+                  </span>
+                  {product?.packs_per_unit && (
+                    <span className="text-[11px] text-ink-3">
+                      {product.packs_per_unit * qty} packs
+                    </span>
+                  )}
+                </div>
+                <span className="flex-none font-mono text-[12.5px] text-ink">
+                  {unitPrice === null ? "—" : `$${(unitPrice * qty).toFixed(2)}`}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <p className="font-mono text-[10.5px] leading-[1.5] text-ink-4">
+        {nTrials.toLocaleString()} pull simulations · prices from last sync · pull rates are
+        estimates
+      </p>
+    </AccentPanel>
+  );
+}
+
+function HeroStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-ink-3">
+        {label}
+      </span>
+      <span className="font-mono text-[16px] font-bold text-ink">{value}</span>
+    </div>
+  );
+}
+
+function SensitivityPanel({ sensitivity }: { sensitivity: SensitivityOut }) {
+  const c = useChartColors();
+  const t = tooltipStyles(c);
+  const data = sensitivity.factors.map((f) => ({
+    name: f.name,
+    base: Math.min(f.low_cost, f.high_cost),
+    range: Math.abs(f.high_cost - f.low_cost),
+    low: f.low_cost,
+    high: f.high_cost,
+  }));
+
+  return (
+    <div>
+      {!sensitivity.robust && (
+        <Callout className="mb-4">
+          This recommendation is not robust: at least one plausible pull-rate or pricing
+          perturbation flips which of these two options is actually cheaper.
+        </Callout>
+      )}
+      <div className="h-64">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} layout="vertical" margin={{ left: 8, right: 16 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={c.grid} horizontal={false} />
+            <XAxis
+              type="number"
+              tick={{ fontSize: 11, fill: c.axis }}
+              stroke={c.grid}
+              tickLine={false}
+              tickFormatter={(v: number) => `$${v.toFixed(0)}`}
+            />
+            <YAxis
+              type="category"
+              dataKey="name"
+              tick={{ fontSize: 11, fill: c.axis }}
+              stroke={c.grid}
+              tickLine={false}
+              width={170}
+            />
+            <Tooltip
+              formatter={(
+                _value: number,
+                _key: string,
+                item: { payload?: { low: number; high: number } },
+              ) => {
+                const p = item.payload;
+                return p ? [`$${p.low.toFixed(2)} - $${p.high.toFixed(2)}`, "Range"] : ["", ""];
+              }}
+              contentStyle={t.contentStyle}
+              labelStyle={t.labelStyle}
+              itemStyle={t.itemStyle}
+              cursor={t.cursor}
+            />
+            <ReferenceLine x={sensitivity.strategy_mean} stroke={c.reference} strokeDasharray="4 4" />
+            <Bar dataKey="base" stackId="a" fill="transparent" />
+            <Bar dataKey="range" stackId="a" fill={c.warn} radius={2} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <p className="mt-2.5 text-[11px] text-ink-4">
+        Dashed line: this strategy&rsquo;s mean cost (${sensitivity.strategy_mean.toFixed(2)}). Bars
+        show the cost range under each perturbation.
+      </p>
     </div>
   );
 }
 
 function CostHistogram({ result }: { result: RankedStrategyOut["result"] }) {
+  const c = useChartColors();
+  const t = tooltipStyles(c);
   const { histogram_counts, histogram_edges } = result;
   const data = histogram_counts.map((count, i) => ({
     bucket: `$${histogram_edges[i].toFixed(0)}`,
@@ -261,12 +498,29 @@ function CostHistogram({ result }: { result: RankedStrategyOut["result"] }) {
   return (
     <div className="h-56">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
-          <XAxis dataKey="bucket" tick={{ fontSize: 10 }} interval={Math.ceil(data.length / 8)} />
-          <YAxis tick={{ fontSize: 11 }} width={32} />
-          <Tooltip formatter={(v: number) => [`${v} trials`, "Count"]} />
-          <Bar dataKey="count" fill="#059669" />
+        <BarChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={c.grid} vertical={false} />
+          <XAxis
+            dataKey="bucket"
+            tick={{ fontSize: 10, fill: c.axis }}
+            stroke={c.grid}
+            tickLine={false}
+            interval={Math.ceil(data.length / 8)}
+          />
+          <YAxis
+            tick={{ fontSize: 11, fill: c.axis }}
+            stroke={c.grid}
+            tickLine={false}
+            width={36}
+          />
+          <Tooltip
+            formatter={(v: number) => [`${v} trials`, "Count"]}
+            contentStyle={t.contentStyle}
+            labelStyle={t.labelStyle}
+            itemStyle={t.itemStyle}
+            cursor={t.cursor}
+          />
+          <Bar dataKey="count" fill={c.accent} radius={[2, 2, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

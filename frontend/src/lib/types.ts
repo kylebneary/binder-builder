@@ -207,6 +207,33 @@ export interface SimulateResponseOut {
   uncovered_needed_price_sum: string;
 }
 
+export interface SensitivityIn {
+  sealed_product_ids: Record<number, number>;
+  n_trials?: number;
+  seed?: number;
+  shipping_per_order?: number;
+  cards_per_order?: number;
+  sealed_shipping?: number;
+  sales_tax_rate?: number;
+  liquidation_rate?: number;
+  resale_floor?: number;
+  bulk_threshold?: number;
+}
+
+export interface SensitivityFactorOut {
+  name: string;
+  baseline_cost: number;
+  low_cost: number;
+  high_cost: number;
+}
+
+export interface SensitivityOut {
+  robust: boolean;
+  baseline_mean: number;
+  strategy_mean: number;
+  factors: SensitivityFactorOut[];
+}
+
 export function parseMoney(value: string | null): number | null {
   if (value === null) return null;
   const n = Number(value);
