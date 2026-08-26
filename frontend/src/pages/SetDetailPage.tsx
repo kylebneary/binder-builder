@@ -1,7 +1,17 @@
 import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import CardTile from "../components/CardTile";
 import { useSetDetail } from "../lib/queries";
+import {
+  ButtonLink,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  Page,
+  PageHeader,
+  ProgressBar,
+  Segmented,
+} from "../components/ui";
 
 type Filter = "all" | "owned" | "needed";
 
@@ -17,64 +27,55 @@ export default function SetDetailPage() {
     return set.cards;
   }, [set, filter]);
 
-  if (isLoading) return <p className="p-6 text-neutral-500">Loading...</p>;
-  if (error) return <p className="p-6 text-red-600">Failed to load set: {String(error)}</p>;
-  if (!set) return <p className="p-6 text-neutral-500">Set not found.</p>;
+  if (isLoading) return <LoadingState />;
+  if (error) return <ErrorState message={`Failed to load set: ${String(error)}`} />;
+  if (!set) return <ErrorState message="Set not found." />;
+
+  const completion = set.cards.length > 0 ? set.owned_count / set.cards.length : 0;
 
   return (
-    <div className="mx-auto max-w-6xl p-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">{set.name}</h1>
-          <p className="text-sm text-neutral-500">
-            {set.owned_count} / {set.cards.length} owned
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <FilterButton active={filter === "all"} onClick={() => setFilter("all")}>
-            All ({set.cards.length})
-          </FilterButton>
-          <FilterButton active={filter === "owned"} onClick={() => setFilter("owned")}>
-            Owned ({set.owned_count})
-          </FilterButton>
-          <FilterButton active={filter === "needed"} onClick={() => setFilter("needed")}>
-            Needed ({set.needed_count})
-          </FilterButton>
-          <Link
-            to={`/sets/${set.ptcg_set_id}/entry`}
-            className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700"
-          >
-            Fast entry mode
-          </Link>
-        </div>
+    <Page>
+      <PageHeader
+        title={set.name}
+        subtitle={
+          <>
+            {set.series} · {set.owned_count} / {set.cards.length} owned
+          </>
+        }
+        back={{ to: "/", label: "Sets" }}
+      >
+        <Segmented<Filter>
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: "all", label: `ALL ${set.cards.length}` },
+            { value: "owned", label: `OWNED ${set.owned_count}` },
+            { value: "needed", label: `NEEDED ${set.needed_count}` },
+          ]}
+        />
+        <ButtonLink to={`/sets/${set.ptcg_set_id}/entry`}>Fast entry</ButtonLink>
+      </PageHeader>
+
+      <div className="mb-5 flex items-center gap-3">
+        <ProgressBar value={completion} className="flex-1" />
+        <span className="font-mono text-[11px] font-medium text-accent-text">
+          {(completion * 100).toFixed(0)}%
+        </span>
       </div>
 
-      <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-        {cards.map((card) => (
-          <CardTile key={card.id} card={card} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function FilterButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-        active ? "bg-neutral-900 text-white" : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
-      }`}
-    >
-      {children}
-    </button>
+      {cards.length === 0 ? (
+        <EmptyState title={filter === "owned" ? "Nothing owned yet" : "Nothing left to find"}>
+          {filter === "owned"
+            ? "Quantities entered in fast entry mode show up here."
+            : "Every card in this set is already in the collection."}
+        </EmptyState>
+      ) : (
+        <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-9">
+          {cards.map((card) => (
+            <CardTile key={card.id} card={card} />
+          ))}
+        </div>
+      )}
+    </Page>
   );
 }
