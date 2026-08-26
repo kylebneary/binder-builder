@@ -1,0 +1,50 @@
+[
+  {
+    "id": "sv8-122",
+    "name": "Alolan Diglett",
+    "supertype": "Pokémon",
+    "subtypes": ["Basic"],
+    "hp": "50",
+    "types": ["Metal"],
+    "number": "122",
+    "artist": "sui",
+    "rarity": "Common",
+    "nationalPokedexNumbers": [50],
+    "images": {
+      "small": "https://images.pokemontcg.io/sv8/122.png",
+      "large": "https://images.pokemontcg.io/sv8/122_hires.png"
+    }
+  },
+  {
+    "id": "sv8-123",
+    "name": "Alolan Dugtrio",
+    "supertype": "Pokémon",
+    "subtypes": ["Stage 1"],
+    "hp": "110",
+    "types": ["Metal"],
+    "number": "123",
+    "artist": "sui",
+    "rarity": "Uncommon",
+    "nationalPokedexNumbers": [51],
+    "images": {
+      "small": "https://images.pokemontcg.io/sv8/123.png",
+      "large": "https://images.pokemontcg.io/sv8/123_hires.png"
+    }
+  },
+  {
+    "id": "sv8-208",
+    "name": "Alolan Dugtrio",
+    "supertype": "Pokémon",
+    "subtypes": ["Stage 1"],
+    "hp": "110",
+    "types": ["Metal"],
+    "number": "208",
+    "artist": "sui",
+    "rarity": "Illustration Rare",
+    "nationalPokedexNumbers": [51],
+    "images": {
+      "small": "https://images.pokemontcg.io/sv8/208.png",
+      "large": "https://images.pokemontcg.io/sv8/208_hires.png"
+    }
+  }
+]

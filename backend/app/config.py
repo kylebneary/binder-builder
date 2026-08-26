@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./data/binder_builder.db"
     pokemontcg_api_key: str | None = None
     pokemontcg_base_url: str = "https://api.pokemontcg.io/v2"
+    pokemontcg_github_mirror_base_url: str = (
+        "https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master"
+    )
     tcgcsv_base_url: str = "https://tcgcsv.com"
     tcgcsv_pokemon_category_id: int = 3
 
