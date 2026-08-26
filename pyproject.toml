@@ -57,3 +57,7 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]
 pythonpath = ["backend"]
+addopts = "-m 'not slow'"
+markers = [
+    "slow: performance benchmarks, skipped by default -- run explicitly with `-m slow`",
+]

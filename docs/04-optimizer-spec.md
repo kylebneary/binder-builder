@@ -135,6 +135,16 @@ Uniform-within-rarity is a modelling assumption and must be labelled as one in t
 approximately right for modern sets and clearly wrong for older ones with known short prints.
 Support a per-card `weight` override in the profile YAML for when a set has documented short prints.
 
+**Implementation note (2026-08-25):** `sim/montecarlo.py`'s `draw_boxes` implements steps 1-4
+above with one deliberate simplification to step 3: guaranteed hits are drawn (without
+replacement, vectorised across every `(trial, box)` instance at once) and **added on top of** the
+regular independent slot draws, rather than renormalising the slot outcome distribution to
+exclude the now-satisfied guarantee. In the rare case the same rarity is also independently hit
+by its ordinary slot roll in the same box, this can produce one extra copy versus a strictly
+collated model. This is a documented approximation, not a silent one, and immaterial today since
+no real `box_constraint` data exists yet (`docs/07-data-backlog.md`) -- revisit if/when real
+box-guarantee data makes the distinction actually matter.
+
 ### Performance target
 
 100,000 trials of a 36-pack box on a set of ~200 cards in under two seconds. That requires

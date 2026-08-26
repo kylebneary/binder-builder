@@ -107,9 +107,9 @@ cost distribution and a sensitivity chart, and the analytic-agreement test passe
 - [x] 2.4 Pull-rate YAML schema, Pydantic validators, `bb sync pullrates` loader.
 - [x] 2.5 Author profiles for 3–5 sets the owner actually collects, with sources and confidence.
 - [x] 2.6 `sim/analytic.py` — closed-form expected remaining cost.
-- [ ] 2.7 `sim/montecarlo.py` — vectorised NumPy engine, box constraints, seeded RNG.
-- [ ] 2.8 Test suite from `docs/04-optimizer-spec.md` (all six categories).
-- [ ] 2.9 Performance pass to the 100k-trials-in-2s target.
+- [x] 2.7 `sim/montecarlo.py` — vectorised NumPy engine, box constraints, seeded RNG.
+- [x] 2.8 Test suite from `docs/04-optimizer-spec.md` (all six categories).
+- [x] 2.9 Performance pass to the 100k-trials-in-2s target.
 - [ ] 2.10 Strategy search: grid for ≤2 product types, greedy for more.
 - [ ] 2.11 Objectives: expected cost, p90 cost, budget-constrained completion.
 - [ ] 2.12 `simulation_run` persistence and cache.
@@ -202,6 +202,57 @@ cover: uniform single-slot probability, multi-slot combination, variant matching
 missing-variant-is-zero-not-error case, an exact hand-calculated value, the `k=0` degenerate case,
 excluding not-needed cards, and monotonicity in `k`. Full suite: 113 passing.
 
+**2.7-2.9 shipped (2026-08-25):** `sim/montecarlo.py` implements `draw_boxes`, `singles_cost`,
+`liquidation_value`, and `simulate`, plus a new `services/simulate.py` (the DB <-> sim boundary --
+`build_card_pool`, `resolve_pull_rate_profile`, `build_box_spec`, `sealed_unit_price`).
+
+Two design decisions worth flagging:
+- **Scatter-add uses `np.bincount`, not `np.add.at`.** Every card pulled across every
+  slot/repeat/guarantee is appended as a flat `trial*n_pool + card` index; one `bincount` call at
+  the end builds the `(n_trials, n_pool)` count matrix. This is what makes the 100k-trials/
+  36-pack-box/~200-card performance contract (2.9) achievable without a rewrite -- measured
+  1.5-1.85s across repeated runs on this dev machine, comfortably under the 2s budget (benchmark
+  test in `test_sim_montecarlo.py`, tagged `@pytest.mark.slow` and skipped by default --
+  `pyproject.toml` now has `addopts = "-m 'not slow'"`; run explicitly with `pytest -m slow`).
+- **Box guarantees are additive, not renormalising.** `_draw_box_guarantees` samples without
+  replacement from a guaranteed rarity's pool per `(trial, box)` instance (vectorised via
+  argsort-of-random-keys, no per-instance Python loop) and adds the result on top of the ordinary
+  independent slot draws, rather than removing/renormalising the slot outcome that would have
+  produced the same rarity. Documented, not silent: in the rare case a guaranteed rarity is also
+  independently hit by its normal slot, a box can end up with one more copy than a strictly
+  collated model would produce. Irrelevant today since zero real profiles have `box_constraints`
+  yet (see `docs/07-data-backlog.md`); the spec's own "every box contains exactly N" test bar is
+  verified against a synthetic fixture where the guaranteed rarity is isolated from every regular
+  slot, so the test is exact despite the approximation.
+
+A real gap was found and closed in `services/simulate.py`: `sealed_product.pack_config_id` (FK to
+`pull_rate_profile`) exists in the schema but nothing has ever set it. `resolve_pull_rate_profile`
+honors it if explicitly set, else falls back to the target set's `is_default` profile -- no new
+sync/data-entry work needed, and every real lookup today uses the fallback path. A second,
+smaller gap: a sealed product's own current price is keyed `(tcgplayer_product_id,
+sub_type_name="Normal")` in `current_price` (confirmed in `app/ingest/tcgcsv.py` -- tcgcsv's
+`subTypeName` is null for sealed goods and the adapter defaults it to `"Normal"`); `sealed_unit_price`
+uses that fixed key rather than guessing.
+
+A correctness edge case was found and handled rather than deferred: a goal can include needed
+cards whose rarity has zero coverage in a profile's slot outcomes/box constraints at all (a promo
+rarity, or the unmodeled "Foil Energy" slot some SV-era YAMLs already note) -- no sealed strategy
+can ever produce them, sealed or not. `build_card_pool` now returns
+`uncovered_needed_price_sum` (a plain Decimal) alongside the pool so callers can add it as a flat
+NetCost floor on every strategy, keeping totals reconciled with `services/goals.get_goal_need_list`
+instead of silently undercounting. `sim/types.py`'s `BoxSpec` also gained a `unit_price: float`
+field (mirroring how `CardPool` gained `variant_index` in 2.6) since `simulate()` needs a sealed
+unit's price to compute `SealedCost` and that's not derivable from anything else in `BoxSpec`.
+
+17 new tests: `test_sim_montecarlo.py` covers all six categories from
+`docs/04-optimizer-spec.md`'s "Testing" section (analytic agreement within 3 SE, coupon-collector
+sanity via a from-scratch sequential-completion simulation, degenerate cases, byte-identical
+determinism, exact box-guarantee counts, monotonicity in `k`) plus the performance benchmark;
+`test_service_simulate.py` covers pool scoping, the uncovered-needed accounting,
+owned-card exclusion, profile resolution (default vs. explicit override), and box-spec building
+(including missing `packs_per_unit` and `box_constraint` mapping). Full suite: 130 passing (1
+slow test deselected by default).
+
 ## Phase 3 — Binder designer
 
 **Branch:** `feat/phase-3-binder`
@@ -235,19 +286,27 @@ pockets.
 ## Suggested next session for Claude Code
 
 Phases 0 and 1 are done (see the outstanding real-data step noted under Phase 1, above -- do that
-by hand or in the next session before trusting the numbers). Phase 2's 2.1-2.6 are all done (see
+by hand or in the next session before trusting the numbers). Phase 2's 2.1-2.9 are all done (see
 the notes under Phase 2, above): goal creation, the need list, its plain singles cost, ten real
-pull-rate profiles (4 `medium`-confidence TCGplayer-sourced SV-era sets, 6 `low`-confidence
-thepricedex-sourced SWSH-era sets), and the closed-form `sim/analytic.py` oracle all work and are
-unit-tested (113 passing). Next is 2.7: `sim/montecarlo.py`, the vectorised NumPy engine -- it can
-reuse `sim/analytic.py`'s new `CardPool.variant_index`/`indices_for` plumbing directly for
-uniform-within-rarity draws. It doesn't strictly need `box_constraints` to get started (`draw_box`
-without any `guarantees` should degenerate to the same independent-draw model analytic.py uses,
-which is exactly what 2.8's "analytic agreement" test will check), but exercising the box-collation
-code path *properly* needs a profile that actually has a `box_constraint` -- none of the ten
-authored so far do, since no sourced box-guarantee data was found for any of them. Worth either
-researching that for one set, or accepting box_constraints coverage as synthetic-data-only (a
-hand-built test fixture) until a source turns up.
+pull-rate profiles, and both the closed-form `sim/analytic.py` oracle and the vectorised
+`sim/montecarlo.py` engine (box constraints, seeded RNG, the 100k-trials-in-2s performance bar
+met and benchmarked). `services/simulate.py` is the DB <-> sim boundary that builds `CardPool`/
+`BoxSpec` for a goal and a sealed product. Full suite: 130 passing.
+
+Next is Milestone B: 2.10 (`sim/optimizer.py`'s `search` -- grid for <=2 sealed products, greedy
+for more, always including the singles-only baseline), 2.11 (the four objectives already stubbed
+as the `Objective` enum), and 2.12 (`simulation_run` persistence/caching, keyed on
+`(goal, strategy, params, n_trials, seed, price_date, profile_version)`). This is the layer that
+turns "can simulate one strategy" into "tell me what to buy" -- wire it into the already-stubbed
+`bb sim run <goal_id>` CLI command and a new `POST /goals/{id}/simulate` API route. Remember
+`build_card_pool`'s `uncovered_needed_price_sum` (2.7's note above) needs to be added as a flat
+offset to every strategy's reported NetCost so totals stay reconciled with the plain need-list
+view -- easy to forget since it doesn't show up in any Milestone A test (none of the real profiles
+have an uncovered-rarity gap today).
+
+No real `box_constraint` data exists yet for exercising 2.7's guarantee code path against
+anything but a synthetic fixture -- worth researching one set for this, or accepting
+synthetic-only coverage until a source turns up. This doesn't block Milestone B.
 
 Separately, if picking up pull-rate authoring again: the Trainer-Gallery/Galarian-Gallery schema
 gap (see the Phase 2 note above and `docs/02-data-model.md`'s Pull-rate model section) blocks
