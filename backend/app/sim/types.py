@@ -57,6 +57,7 @@ class PackSpec:
 class BoxSpec:
     packs_per_box: int
     pack: PackSpec
+    unit_price: float = 0.0
     # rarity_index -> (min, max) guaranteed per box. This is what forces Monte Carlo.
     guarantees: dict[int, tuple[int, int]] = field(default_factory=dict)
 
