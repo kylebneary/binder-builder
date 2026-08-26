@@ -143,7 +143,7 @@ export function Chip({
 }) {
   const activeClass =
     tone === "warn"
-      ? "bg-warn text-canvas"
+      ? "bg-warn text-warn-fg"
       : tone === "neutral"
         ? "bg-track text-ink"
         : "bg-accent text-accent-fg";
@@ -173,7 +173,7 @@ export function Tag({
     accent: "bg-accent-surface text-accent-text",
     warn: "bg-warn-surface text-warn-text",
     danger: "bg-danger-surface text-danger-text",
-    neutral: "bg-inset text-ink-4",
+    neutral: "bg-inset text-ink-3",
   } as const;
   return (
     <span
@@ -240,7 +240,7 @@ export function Field({
     <label className="flex flex-col gap-1.5">
       <span className="text-[12.5px] font-medium text-ink-2">{label}</span>
       {children}
-      {hint && <span className="text-[11px] text-ink-4">{hint}</span>}
+      {hint && <span className="text-[11px] text-ink-3">{hint}</span>}
     </label>
   );
 }
@@ -270,7 +270,13 @@ export function ProgressBar({
 }) {
   const pct = Math.max(0, Math.min(1, value)) * 100;
   return (
-    <div className={cx("h-1 overflow-hidden rounded-full bg-track", className)}>
+    <div
+      role="progressbar"
+      aria-valuenow={Math.round(pct)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      className={cx("h-1 overflow-hidden rounded-full bg-track", className)}
+    >
       <div
         className={cx("h-full transition-[width]", tone === "muted" ? "bg-track-muted" : "bg-accent")}
         style={{ width: `${pct}%` }}
@@ -290,7 +296,11 @@ export function SplitBar({
 }) {
   const pct = Math.max(0, Math.min(1, left)) * 100;
   return (
-    <div className={cx("flex h-1.5 overflow-hidden rounded-full bg-track", className)}>
+    <div
+      role="img"
+      aria-label={`${Math.round(pct)}% singles, ${100 - Math.round(pct)}% sealed`}
+      className={cx("flex h-1.5 overflow-hidden rounded-full bg-track", className)}
+    >
       <div className="bg-accent" style={{ width: `${pct}%` }} />
       <div className="bg-warn" style={{ width: `${100 - pct}%` }} />
     </div>
@@ -316,7 +326,7 @@ export function Stat({
       <div className={cx("font-mono text-[22px] font-bold tracking-[-0.5px]", toneClass)}>
         {value}
       </div>
-      {hint && <div className="text-[11px] text-ink-4">{hint}</div>}
+      {hint && <div className="text-[11px] text-ink-3">{hint}</div>}
     </Panel>
   );
 }
@@ -349,7 +359,7 @@ export function Callout({
 
 export function LoadingState({ label = "Loading" }: { label?: string }) {
   return (
-    <div className="flex items-center gap-2.5 px-6 py-16 text-ink-3">
+    <div role="status" aria-live="polite" className="flex items-center gap-2.5 px-6 py-16 text-ink-3">
       <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
       <span className="font-mono text-[12px] uppercase tracking-[0.08em]">{label}</span>
     </div>
@@ -358,7 +368,7 @@ export function LoadingState({ label = "Loading" }: { label?: string }) {
 
 export function ErrorState({ message }: { message: string }) {
   return (
-    <div className="px-6 py-16">
+    <div role="alert" className="px-6 py-16">
       <Callout tone="danger" className="max-w-xl">
         {message}
       </Callout>
