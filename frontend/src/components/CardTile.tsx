@@ -27,7 +27,7 @@ export default function CardTile({ card }: { card: CardOut }) {
           />
         ) : (
           <div className="hatch flex aspect-card items-center justify-center rounded border border-line-card px-1">
-            <span className="font-mono text-[9.5px] uppercase tracking-[0.06em] text-ink-4">
+            <span className="font-mono text-[9.5px] uppercase tracking-[0.06em] text-ink-3">
               No image
             </span>
           </div>
@@ -46,7 +46,7 @@ export default function CardTile({ card }: { card: CardOut }) {
         <div className="truncate text-[11px] font-medium leading-tight text-ink-2" title={card.name}>
           {card.name}
         </div>
-        <div className="truncate text-[10.5px] text-ink-4">{card.rarity ?? "—"}</div>
+        <div className="truncate text-[10.5px] text-ink-3">{card.rarity ?? "—"}</div>
         {canonical && (
           <div className="font-mono text-[10.5px] font-medium text-ink-3">
             {formatMoney(canonical.market_price)}

@@ -174,7 +174,7 @@ export default function BulkEntryPage() {
               />
             ) : (
               <div className="hatch-lg flex aspect-card w-full flex-col justify-end rounded-[9px] border border-line-card p-3 shadow-hero">
-                <span className="font-mono text-[10px] uppercase tracking-[0.06em] text-ink-4">
+                <span className="font-mono text-[10px] uppercase tracking-[0.06em] text-ink-3">
                   No image
                 </span>
                 <span className="text-[15px] font-semibold text-ink">{card.name}</span>

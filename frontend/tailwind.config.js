@@ -35,6 +35,7 @@ export default {
         warn: {
           DEFAULT: "var(--warn)",
           text: "var(--warn-text)",
+          fg: "var(--warn-fg)",
           surface: "var(--warn-surface)",
           line: "var(--warn-line)",
         },

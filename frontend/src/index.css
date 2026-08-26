@@ -32,8 +32,11 @@
 
   --text: #1e1c19;
   --text-2: #3b3833;
-  --text-3: #7a746b;
-  --text-4: #948d83;
+  /* Darkened from the mockup's #7a746b: at the mockup value this is 4.14:1 on canvas,
+     under WCAG AA for the 10-12px mono labels used throughout. */
+  --text-3: #6f6961;
+  /* Likewise #948d83 was 2.94:1. */
+  --text-4: #7a736a;
 
   --accent: #3b6ea8;
   --accent-fg: #fdfcfa;
@@ -46,6 +49,7 @@
   --warn-text: #8c6229;
   --warn-surface: #f6eddf;
   --warn-line: #e6d3b4;
+  --warn-fg: #2a1e0b;
 
   /* No red in the mockups; these are mixed to sit in the same warm family. */
   --danger: #a8443a;
@@ -105,6 +109,7 @@
   --warn-text: #e8b166;
   --warn-surface: #2b2419;
   --warn-line: #4a3a22;
+  --warn-fg: #14100a;
 
   --danger: #e3796d;
   --danger-text: #e3796d;
@@ -168,5 +173,40 @@
   /* The mockups set every small uppercase label in mono with wide tracking. */
   .label-mono {
     @apply font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-ink-3;
+  }
+}
+
+@layer base {
+  /*
+   * Visible keyboard focus. Element+pseudo-class beats Tailwind's `.outline-none` on
+   * specificity, so the fields in ui.tsx keep their focus ring even though the utility
+   * clears the UA outline. Bulk entry is a keyboard-first screen -- this is not optional.
+   */
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  summary:focus-visible,
+  [tabindex]:focus-visible,
+  [role="button"]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* Mouse users never see it; the rule above is the only focus affordance. */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

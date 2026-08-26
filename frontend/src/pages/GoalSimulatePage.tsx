@@ -139,7 +139,7 @@ export default function GoalSimulatePage() {
           ) : products.length === 0 ? (
             <p className="text-[12.5px] text-ink-3">No sealed products found for this set.</p>
           ) : (
-            <div className="-mx-1 max-h-72 space-y-0.5 overflow-y-auto px-1">
+            <div className="max-h-72 space-y-0.5 overflow-y-auto rounded-lg border border-line p-1">
               {products.map((p) => {
                 const disabled = !p.has_pull_rate_profile;
                 return (
