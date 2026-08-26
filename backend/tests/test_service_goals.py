@@ -7,6 +7,7 @@ from app.services.goals import (
     create_goal,
     delete_goal,
     get_goal_need_list,
+    mass_entry_text,
     resync_goal,
 )
 
@@ -217,3 +218,35 @@ def test_delete_goal(db):
     assert delete_goal(db, goal.id) is True
     assert get_goal_need_list(db, goal.id, collection_id=1) is None
     assert delete_goal(db, goal.id) is False
+
+
+def test_mass_entry_text_lists_only_still_needed_items(db):
+    set_row, diglett, dugtrio, collection = _seed(db)
+    goal = create_goal(db, "Surging Sparks set", GoalType.SET, set_id=set_row.id)
+    owned_variant = next(v for v in diglett.variants if v.is_canonical)
+    db.add(CollectionItem(collection_id=collection.id, card_variant_id=owned_variant.id, quantity=1))
+    db.commit()
+
+    detail = get_goal_need_list(db, goal.id, collection.id)
+    assert detail is not None
+    text = mass_entry_text(detail)
+
+    lines = text.splitlines()
+    assert len(lines) == 1  # diglett is fully owned, dugtrio is still needed
+    assert lines[0] == f"1 {dugtrio.name}"
+    assert text.endswith("\n")
+
+
+def test_mass_entry_text_empty_when_nothing_needed(db):
+    set_row, diglett, dugtrio, collection = _seed(db)
+    goal = create_goal(db, "Surging Sparks set", GoalType.SET, set_id=set_row.id)
+    for card in (diglett, dugtrio):
+        owned_variant = next(v for v in card.variants if v.is_canonical)
+        db.add(
+            CollectionItem(collection_id=collection.id, card_variant_id=owned_variant.id, quantity=1)
+        )
+    db.commit()
+
+    detail = get_goal_need_list(db, goal.id, collection.id)
+    assert detail is not None
+    assert mass_entry_text(detail) == ""

@@ -379,6 +379,34 @@ def goal_need_list(goal_id: int) -> None:
     )
 
 
+@goal_app.command("export-mass-entry")
+def goal_export_mass_entry(
+    goal_id: int,
+    path: str | None = typer.Option(
+        None, "--path", help="Write to this file instead of printing to stdout."
+    ),
+) -> None:
+    """Export a goal's still-needed cards in TCGplayer Mass Entry format (one '<qty> <name>'
+    line per card)."""
+    db = SessionLocal()
+    try:
+        collection = get_or_create_default_collection(db)
+        detail = goals_service.get_goal_need_list(db, goal_id, collection.id)
+    finally:
+        db.close()
+
+    if detail is None:
+        console.print(f"[red]No goal with id {goal_id}.[/red]")
+        raise typer.Exit(code=1)
+
+    text = goals_service.mass_entry_text(detail)
+    if path:
+        Path(path).write_text(text, encoding="utf-8")
+        console.print(f"Wrote {path}")
+    else:
+        console.print(text, end="")
+
+
 @sim_app.command("run")
 def sim_run(
     goal_id: int,

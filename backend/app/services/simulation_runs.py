@@ -24,6 +24,7 @@ from app.services.simulate import (
 )
 from app.sim.montecarlo import simulate
 from app.sim.optimizer import Objective, search
+from app.sim.optimizer import sensitivity as sim_sensitivity
 from app.sim.types import BoxSpec, CardPool, CostParams, SimResult, Strategy
 
 
@@ -245,4 +246,53 @@ def run_search_and_cache(
         runs=runs,
         unsimulatable=unsimulatable,
         uncovered_needed_price_sum=pool_result.uncovered_needed_price_sum,
+    )
+
+
+def run_sensitivity(
+    db: Session,
+    goal_id: int,
+    strategy: Strategy,
+    params: CostParams,
+    n_trials: int = 20_000,
+    seed: int = 0,
+) -> dict:
+    """Tornado analysis for one strategy vs. the singles-only baseline. Not persisted as a
+    `simulation_run` row -- it's a derived, multi-simulation analysis over a single strategy
+    rather than a single reproducible run, and would need its own cache-key shape to be worth
+    caching; the underlying `simulate()` calls are already cheap relative to a full `search()`.
+
+    Builds the low/high price-basis pools `sim/optimizer.sensitivity()` needs via
+    `build_card_pool`'s `price_field` parameter -- the piece Milestone B's `sensitivity()` deferred
+    since it needs DB access. Note: `needed` is recomputed independently per price basis (a card
+    priced under "market" but not "low"/"high", or vice versa, would shift which cards count as
+    needed between the three pools) -- a known, minor edge case, not reconciled here.
+    """
+    goal = db.get(Goal, goal_id)
+    if goal is None or goal.set_id is None:
+        raise ValueError(f"Goal {goal_id} not found or has no set")
+    profile = _load_primary_profile(db, goal.set_id)
+    if profile is None:
+        raise ValueError(f"No pull-rate profile for set {goal.set_id}")
+
+    collection = get_or_create_default_collection(db)
+    pool_result = build_card_pool(db, goal.set_id, profile, goal_id, collection.id)
+    low_pool_result = build_card_pool(
+        db, goal.set_id, profile, goal_id, collection.id, price_field="low"
+    )
+    high_pool_result = build_card_pool(
+        db, goal.set_id, profile, goal_id, collection.id, price_field="high"
+    )
+    boxes, _unsimulatable = _resolve_boxes(
+        db, goal.set_id, profile, pool_result.pool, set(strategy.units.keys()) or None
+    )
+
+    return sim_sensitivity(
+        strategy,
+        pool_result.pool,
+        boxes,
+        params,
+        n_trials=n_trials,
+        seed=seed,
+        price_basis_pools={"low": low_pool_result.pool, "high": high_pool_result.pool},
     )

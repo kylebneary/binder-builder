@@ -73,6 +73,7 @@ def client():
             PricePoint(
                 tcgplayer_product_id=1001, sub_type_name="Holofoil",
                 observed_on=date(2026, 8, 25), source="tcgcsv", market=20.00,
+                low=15.00, high=30.00,
             )
         )
 
@@ -121,6 +122,26 @@ def test_list_sealed_products_404_for_missing_set(client):
     assert r.status_code == 404
 
 
+def test_export_goal_mass_entry_returns_plain_text(client):
+    r = client.get("/api/v1/sets/sv8")
+    set_id = r.json()["id"]
+    r = client.post(
+        "/api/v1/goals",
+        json={"name": "Surging Sparks master set", "goal_type": "master_set", "set_id": set_id},
+    )
+    goal_id = r.json()["id"]
+
+    r = client.get(f"/api/v1/goals/{goal_id}/export/mass-entry")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/plain")
+    assert r.text == "1 Charizard\n"
+
+
+def test_export_goal_mass_entry_404_for_missing_goal(client):
+    r = client.get("/api/v1/goals/999999/export/mass-entry")
+    assert r.status_code == 404
+
+
 def test_simulate_goal_returns_ranked_strategies_with_baseline(client):
     r = client.get("/api/v1/sets/sv8")
     set_id = r.json()["id"]
@@ -139,6 +160,25 @@ def test_simulate_goal_returns_ranked_strategies_with_baseline(client):
     assert () in strategies
     means = [item["result"]["mean"] for item in body["ranked"]]
     assert means == sorted(means)
+
+
+def test_sensitivity_goal_returns_factors_and_robust_flag(client):
+    r = client.get("/api/v1/sets/sv8")
+    set_id = r.json()["id"]
+    r = client.post(
+        "/api/v1/goals",
+        json={"name": "Surging Sparks master set", "goal_type": "master_set", "set_id": set_id},
+    )
+    goal_id = r.json()["id"]
+
+    r = client.post(
+        f"/api/v1/goals/{goal_id}/sensitivity", json={"sealed_product_ids": {}, "n_trials": 1000}
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert isinstance(body["robust"], bool)
+    names = [f["name"] for f in body["factors"]]
+    assert "price basis (low vs. high)" in names
 
 
 def test_simulate_goal_invalid_objective_422(client):

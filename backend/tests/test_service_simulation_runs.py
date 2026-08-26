@@ -15,7 +15,7 @@ from app.models import (
 )
 from app.models.enums import GoalType, Variant
 from app.services.goals import materialize_goal_items
-from app.services.simulation_runs import run_and_cache, run_search_and_cache
+from app.services.simulation_runs import run_and_cache, run_search_and_cache, run_sensitivity
 from app.sim.optimizer import Objective
 from app.sim.types import CostParams, Strategy
 
@@ -40,7 +40,7 @@ def _seed(db):
     db.add(
         PricePoint(
             tcgplayer_product_id=1001, sub_type_name="Holofoil", observed_on=date(2026, 8, 25),
-            source="tcgcsv", market=Decimal("20.00"),
+            source="tcgcsv", market=Decimal("20.00"), low=Decimal("15.00"), high=Decimal("30.00"),
         )
     )
 
@@ -134,3 +134,14 @@ def test_run_search_and_cache_reports_unsimulatable_products(db):
         db, seeded["goal"].id, Objective.MIN_EXPECTED_COST, CostParams(), n_trials=1000, seed=0
     )
     assert any(u["sealed_product_id"] == unpriced_no_packs.id for u in result.unsimulatable)
+
+
+def test_run_sensitivity_includes_price_basis_factor(db):
+    seeded = _seed(db)
+    result = run_sensitivity(
+        db, seeded["goal"].id, Strategy(units={seeded["sealed"].id: 1}), CostParams(),
+        n_trials=1000, seed=0,
+    )
+    names = [f["name"] for f in result["factors"]]
+    assert "price basis (low vs. high)" in names
+    assert isinstance(result["robust"], bool)

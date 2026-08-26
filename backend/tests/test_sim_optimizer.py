@@ -92,4 +92,30 @@ def test_sensitivity_reports_baseline_and_strategy_means():
     result = sensitivity(Strategy(units={1: 1}), pool, {1: box}, CostParams(), n_trials=2000, seed=0)
     assert result["baseline_mean"] >= 0
     assert result["strategy_mean"] >= 0
+
+
+def test_sensitivity_includes_price_basis_factor_when_pools_given():
+    pool = make_pool([(10.0, "Rare", True)] * 3)
+    low_pool = make_pool([(8.0, "Rare", True)] * 3)
+    high_pool = make_pool([(12.0, "Rare", True)] * 3)
+    box = make_box([make_slot(1, "Rare")], packs_per_box=3, unit_price=5.0)
+    result = sensitivity(
+        Strategy(units={1: 1}),
+        pool,
+        {1: box},
+        CostParams(),
+        n_trials=2000,
+        seed=0,
+        price_basis_pools={"low": low_pool, "high": high_pool},
+    )
+    names = [f["name"] for f in result["factors"]]
+    assert "price basis (low vs. high)" in names
+
+
+def test_sensitivity_omits_price_basis_factor_by_default():
+    pool = make_pool([(10.0, "Rare", True)] * 3)
+    box = make_box([make_slot(1, "Rare")], packs_per_box=3, unit_price=5.0)
+    result = sensitivity(Strategy(units={1: 1}), pool, {1: box}, CostParams(), n_trials=2000, seed=0)
+    names = [f["name"] for f in result["factors"]]
+    assert "price basis (low vs. high)" not in names
     assert len(result["factors"]) >= 1  # at least liquidation_rate + sealed unit price

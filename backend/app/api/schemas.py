@@ -227,3 +227,30 @@ class SimulateResponseOut(BaseModel):
     ranked: list[RankedStrategyOut]
     unsimulatable: list[UnsimulatableProductOut]
     uncovered_needed_price_sum: Decimal
+
+
+class SensitivityIn(BaseModel):
+    sealed_product_ids: dict[int, int] = {}  # sealed_product_id -> qty; empty == singles only
+    n_trials: int = 20_000
+    seed: int = 0
+    shipping_per_order: float | None = None
+    cards_per_order: int | None = None
+    sealed_shipping: float | None = None
+    sales_tax_rate: float | None = None
+    liquidation_rate: float | None = None
+    resale_floor: float | None = None
+    bulk_threshold: float | None = None
+
+
+class SensitivityFactorOut(BaseModel):
+    name: str
+    baseline_cost: float
+    low_cost: float
+    high_cost: float
+
+
+class SensitivityOut(BaseModel):
+    robust: bool
+    baseline_mean: float
+    strategy_mean: float
+    factors: list[SensitivityFactorOut]

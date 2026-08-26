@@ -276,21 +276,25 @@ def sensitivity(
     n_trials: int = 20_000,
     seed: int = 0,
     baseline_strategy: Strategy | None = None,
+    price_basis_pools: dict[str, CardPool] | None = None,
 ) -> dict:
     """Tornado analysis. Ship this -- it is not optional.
 
     Perturbs: top-3 needed chase rarities' pull rates (+/-50%), `liquidation_rate` (0.5-0.85),
-    and sealed unit price (+/-20%). Price-basis (low/market/high) perturbation needs alternate
-    `CardPool.prices` arrays built from `get_current_prices`, which requires DB access this
-    DB-oblivious module can't do itself -- deferred to the service layer that wires this into the
-    UI (docs/06-roadmap.md's Phase 2 notes).
+    sealed unit price (+/-20%), and -- if `price_basis_pools` is given -- the low/high price
+    basis. Building the low/high `CardPool`s needs `get_current_prices`, which requires DB
+    access this DB-oblivious module can't do itself; the caller (service layer) builds them via
+    `services/simulate.build_card_pool`'s `price_field` parameter and passes them in as
+    `{"low": ..., "high": ...}`. Omitted (the default) if the caller doesn't have them yet.
 
     Returns `{robust, baseline_mean, strategy_mean, factors: [{name, baseline_cost, low_cost,
     high_cost}]}`. `robust=False` if any perturbation flips which of (strategy, baseline) is
     cheaper -- the caller must surface this, not bury it in a number.
     """
-    def _mean(s: Strategy, b: dict[int, BoxSpec], p: CostParams) -> float:
-        return simulate(s, pool, b, p, n_trials=n_trials, seed=seed).mean
+    def _mean(
+        s: Strategy, b: dict[int, BoxSpec], p: CostParams, pl: CardPool | None = None
+    ) -> float:
+        return simulate(s, pl if pl is not None else pool, b, p, n_trials=n_trials, seed=seed).mean
 
     baseline_strategy = baseline_strategy if baseline_strategy is not None else Strategy()
     base_mean = _mean(strategy, boxes, params)
@@ -342,6 +346,17 @@ def sensitivity(
         base_baseline_mean,
         base_baseline_mean,
     )
+
+    if price_basis_pools and "low" in price_basis_pools and "high" in price_basis_pools:
+        low_pool = price_basis_pools["low"]
+        high_pool = price_basis_pools["high"]
+        _record(
+            "price basis (low vs. high)",
+            _mean(strategy, boxes, params, low_pool),
+            _mean(strategy, boxes, params, high_pool),
+            _mean(baseline_strategy, boxes, params, low_pool),
+            _mean(baseline_strategy, boxes, params, high_pool),
+        )
 
     return {
         "robust": robust,
