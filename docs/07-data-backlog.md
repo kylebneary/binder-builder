@@ -13,23 +13,24 @@ sets nobody currently needs data for.
 
 ## 1. Card data: sets not yet ingested
 
-`bb ingest cards --all` (real-data run, 2026-08-25) got 166 of 174 ptcg sets. These 8 failed
-pokemontcg.io across four escalating retry passes and still need a resolution:
+**Resolved 2026-08-25.** `bb ingest cards --all` originally got 166 of 174 ptcg sets; the other 8
+(`smp`, `sv1`, `sv10`, `sve`, `swsh7`, `xy3`, `xy4`, `xyp`) failed pokemontcg.io across four
+escalating retry passes. Live-API retries the same day were still flaky (spot-checked: `sv1` and
+`smp` returned 200, `sv10`/`sve`/`swsh7`/`xy4`/`xyp` returned 500/502 on the same pass), so rather
+than keep retrying, a new adapter was added: `app/ingest/pokemontcg_github.py`
+(`PokemonTcgGithubMirrorSource`), which reads the same card/set JSON from the
+`PokemonTCG/pokemon-tcg-data` GitHub mirror (static files, no rate limit, no observed downtime).
+All 8 sets fetched cleanly on the first attempt via `bb ingest cards --source github-mirror --set
+<id> ...`. `data/set_map.yaml` already had tcgcsv group mappings for all 8 (from the original
+research pass); `bb sync setmap` + `bb ingest prices --group <id> ...` linked them and pulled real
+prices. Card counts: `smp` 251, `sv1` 258, `sv10` 244, `sve` 16, `swsh7` 237, `xy3` 114, `xy4` 124,
+`xyp` 216 — all 174 ptcg sets now ingested. `sv1` in particular (the owner's single largest CSV
+entry) is now unblocked for pull-rate authoring (see 2b below).
 
-- [ ] `smp` — SM Promos
-- [ ] `sv1` — **Scarlet & Violet base set** (the owner's single largest CSV entry, 554 rows —
-      highest-priority item on this entire list)
-- [ ] `sv10`
-- [ ] `sve` — Scarlet & Violet Energies
-- [ ] `swsh7` — **Evolving Skies** (112 rows in the owner's collection)
-- [ ] `xy3`
-- [ ] `xy4`
-- [ ] `xyp` — XY Promos
-
-`app/ingest/pokemontcg_offline.py` + `scripts/import_offline_cards.py` exist as a manual
-fallback (hand-download the pokemontcg.io JSON, import from disk) if retrying the live API keeps
-failing. Worth trying the `PokemonTCG/pokemon-tcg-data` GitHub mirror as an alternative source —
-not yet attempted.
+The live API is worth retrying occasionally since it carries a couple of fields the mirror
+doesn't bother with (none used by this project's `CardDTO` today), but `--source github-mirror`
+is now the standing fallback for any future flaky-set situation — no more hand-downloading JSON
+through `pokemontcg_offline.py` unless the mirror itself is ever down too.
 
 Two sets (`tk1a`/`tk1b`, `tk2a`/`tk2b` — the EX Trainer Kit half-decks) are **permanently
 unmappable**, not just unfetched: tcgcsv sells each pair as one combined product with
@@ -38,9 +39,26 @@ overlapping card numbers, and `Set.tcgplayer_group_id` is unique per set. Docume
 
 ## 2. Pull-rate profiles (`data/pull_rates/*.yaml`)
 
-10 done as of 2026-08-25 (see `docs/06-roadmap.md`'s Phase 2 notes for full sourcing detail):
-`sv2`, `sv3pt5`, `sv7`, `sv8` (medium confidence, TCGplayer-sourced), `swsh1`, `swsh2`, `swsh3`,
-`swsh5`, `swsh6`, `swsh8` (low confidence, thepricedex.com-sourced).
+12 done as of 2026-08-25 (see `docs/06-roadmap.md`'s Phase 2 notes for full sourcing detail):
+`sv2`, `sv3pt5`, `sv7`, `sv8` (medium confidence, TCGplayer-sourced), `pgo`, `swsh1`, `swsh2`,
+`swsh3`, `swsh4`, `swsh5`, `swsh6`, `swsh8` (low confidence, thepricedex.com-sourced).
+
+**`swsh4` and `pgo` moved out of "no source found" 2026-08-25.** Both had been marked blocked
+after an earlier pass found nothing on thepricedex.com; re-searching turned up a page for each
+that the earlier pass had evidently missed. `swsh4` (Vivid Voltage): odds for the one-off
+"Amazing Rare" rarity (1 in 17.5 packs) — the specific gap that had blocked it. A second
+aggregator (pullrates.com) also covers Vivid Voltage but gives a materially different Amazing
+Rare figure (1 in 5) with no disclosed methodology; thepricedex was used for consistency with
+this project's other SWSH-era profiles, and the disagreement is called out in the YAML's own
+notes rather than silently picking one. `pgo` (Pokémon GO, the owner's single most-collected set
+by row count): thepricedex's page covers every rarity in the set, including the set-specific
+"Radiant Rare", and — unlike every SWSH-era profile here — reports its *own* reverse-holo odds
+directly rather than needing swsh3's borrowed split. See `data/pull_rates/swsh4.yaml` and
+`data/pull_rates/pgo.yaml`'s header comments for full sourcing detail and renormalization math.
+`pgo` remains a special case in one other way, unrelated to pull rates: it was sold only as
+standalone booster packs with no booster-box SKU, so it will still need box-less sealed-cost
+handling in `docs/04-optimizer-spec.md`'s cost math before a goal for this set can price a sealed
+strategy — not attempted here, since it's a sim/cost-model change, not a data-sourcing one.
 
 ### 2a. Blocked on a schema gap, not on research
 
@@ -61,17 +79,11 @@ needs a model/schema decision (e.g. an optional `set_id` override on `slot_outco
 
 ### 2b. Blocked on missing/inadequate source data
 
-- [ ] `pgo` — **Pokémon GO** (507 rows — the owner's single most-collected set by row count).
-      No TCGplayer article found; nothing on thepricedex.com either. No source cleared even the
-      relaxed "low confidence, real numbers" bar as of 2026-08-25. Also a special product (sold
-      only as standalone packs, no booster box) — will need box-less cost-model handling in
-      `docs/04-optimizer-spec.md`'s cost math regardless of pull-rate data.
-- [ ] `swsh4` — Vivid Voltage (91 rows). Introduces the one-off "Amazing Rare" rarity (6 cards),
-      which neither TCGplayer nor thepricedex accounts for. Needs a source that specifically
-      covers Amazing Rare odds, or an explicit decision to fold it into another slot with a
-      stated (low-confidence) assumption.
-- [ ] `sv1` — Scarlet & Violet base (554 rows). Not started — blocked on card ingest (1 above)
-      first; can't validate a profile's rarity strings against a set with no ingested cards.
+- [ ] `sv1` — Scarlet & Violet base (554 rows). No longer blocked on card ingest (1 above is now
+      resolved — 258 cards in the DB) — the remaining work is finding a sourced pull-rate article
+      the way `sv2`/`sv3pt5`/`sv7`/`sv8` have one, or falling back to the same
+      thepricedex.com-style low-confidence treatment used for the SWSH-era sets. Not attempted
+      yet.
 
 ### 2c. Not yet attempted (owner collects these, no research done)
 
@@ -102,14 +114,49 @@ Halloween promo bundle product, not something to build a pull-rate profile for.
 
 ## 3. Price / variant data gaps
 
-- [ ] **SWSH-era Rare Ultra / Rare Rainbow / Rare Secret have zero priced `card_variant` rows.**
-      Found while cross-checking pull-rate data (2026-08-25): confirmed across `swsh1`, `swsh2`,
-      `swsh3`, `swsh5`, `swsh6`, `swsh8` — the `card` rows exist, but no `card_variant` (and
-      therefore no price) was ever ingested for those three rarities specifically. Doesn't block
-      pull-rate sync (validation only checks `card.rarity`), but any goal need-list touching
-      those cards will show them as unpriced. Root cause not yet investigated — worth checking
-      whether tcgcsv's `subTypeName` data for these products was actually missing, or whether the
-      ingest adapter mishandled them.
+- [ ] **SWSH-era (and `pgo`) Rare Ultra / Rare Rainbow / Rare Secret have zero priced
+      `card_variant` rows.** Found while cross-checking pull-rate data (2026-08-25): confirmed
+      across `swsh1`, `swsh2`, `swsh3`, `swsh4`, `swsh5`, `swsh6`, `swsh8`, and `pgo` — the
+      `card` rows exist, but no `card_variant` (and therefore no price) was ever ingested for
+      those three rarities specifically. Doesn't block pull-rate sync (validation only checks
+      `card.rarity`), but any goal need-list touching those cards will show them as unpriced.
+
+      **Root cause found and mostly fixed 2026-08-25** (checking `swsh1` "Dhelmise V",
+      `card.number` "187", `card.rarity` "Rare Ultra"): tcgcsv does carry the product and a price
+      — group 2585 has `productId 208385, "Dhelmise V (Full Art)", Number "187/202", Rarity
+      "Ultra Rare"` — but `bb ingest prices` was logging `Skipping variant derivation for card
+      swsh1-187: number matched, name differs: 'Dhelmise V' vs 'Dhelmise V Full Art' (confidence
+      0.5)`. Not a missing data source: `app/ingest/mapping.py`'s card→product name-matching
+      heuristic was correctly refusing to auto-link below its confidence threshold
+      (docs/03-data-sources.md: "silent mismatches produce confidently wrong prices, which is
+      worse than a gap"), it just didn't know that tcgcsv's `cleanName` appends a special-
+      treatment word (e.g. "Full Art") that pokemontcg.io's name never carries. Fixed by adding
+      `strip_known_treatment_suffix()` (a finite whitelist: "full art", "alternate full art",
+      "rainbow rare", "rainbow", "secret rare", "alternate art secret", "secret", "gold rare",
+      "gold", "alternate art", "alt art" — matched as a longest-suffix-wins trailing strip, never
+      a generic guess) and wiring it into `match_cards_in_set`'s name comparison, then re-running
+      `bb ingest prices` for all 8 affected groups (including `swsh4` group 2701 and `pgo` group
+      3064, once the same gap turned up in both while sourcing their pull-rate profiles). Coverage
+      for Rare Ultra/Rainbow/Secret across `swsh1/2/3/4/5/6/8` + `pgo` went from **0 of 302** cards
+      priced to **291 of 302**.
+
+      **11 cards still unpriced** — the residual name-mismatch patterns are unrelated
+      normalization gaps in `normalize_name` itself, not more treatment-word variants: `&`
+      becomes the word "and" in tcgcsv's cleanName but is just dropped as punctuation by
+      pokemontcg.io's raw name (`"Chili & Cilan & Cress"` vs "Chili and Cilan and Cress"), a
+      hyphen becomes a space in tcgcsv but is dropped entirely by pokemontcg.io's normalization
+      (`"Cram-o-matic"` vs "Cram o matic" — normalizes to "cramomatic" vs "cram o matic", a real
+      word-boundary mismatch, not just a suffix), an accented-character mismatch in `swsh4` and
+      `pgo` (`"Pokémon Center Lady"` / `"PokéStop"` vs tcgcsv's ASCII-folded "Pokemon"/"Poke" —
+      the "é" is dropped), a bare-number-without-total suffix in `pgo` (`"Pikachu"` vs tcgcsv's
+      "Pikachu 27", missing the "/88" tcgcsv usually includes, which `strip_disambiguating_number`
+      requires to match), and a treatment word inserted *before* a trailing number rather than
+      purely as a suffix (`pgo`'s `"Mewtwo VSTAR"` vs "Mewtwo VSTAR 79 Secret" — stripping "Secret"
+      alone still leaves a dangling "79"). All are general `normalize_name`/`mapping.py` fixes,
+      not set-specific, and would likely help match rates in other sets too — worth doing as a
+      follow-up but deliberately not bundled into this pass since they're a different kind of
+      change (core normalization, not a treatment-suffix whitelist) and deserve their own
+      verification.
 - [ ] `data/sealed_map.yaml`: ~2,405 of ~2,922 tcgcsv sealed products still need hand
       classification (`product_type` / `packs_per_unit`) — the remaining ~517 were mechanically
       classifiable by name pattern. `bb sync sealedmap` prints the review queue. Tracked here as

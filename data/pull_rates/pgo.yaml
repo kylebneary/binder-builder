@@ -1,0 +1,97 @@
+# Pokemon GO (pgo) - standard booster.
+#
+# Previously on the "blocked, no source found" list (docs/07-data-backlog.md 2b) -- despite being
+# the owner's single most-collected set by row count, an earlier pass found no TCGplayer article
+# and "nothing on thepricedex.com either". Re-checked 2026-08-25 and thepricedex.com does in fact
+# have a Pokemon GO page (https://www.thepricedex.com/set/pgo/pokemon-go/pull-rates) covering every
+# rarity in this set, including the set-specific "Radiant Rare" -- the earlier pass evidently
+# missed it, the same way the swsh4 gap turned out to be a missed page, not a real absence.
+#
+# Hit-rarity odds (Rare Secret through plain Rare Holo in the "rare-or-better" slot) come from
+# thepricedex.com's per-set pull-rate page, described as "estimates primarily sourced from
+# Pokemon GO pull rates research and based on community data" -- a third-party aggregator citing
+# community research, not a first-party study this project independently verified. Sample size:
+# not disclosed on the page. That is why this profile is `confidence: low`, unlike the
+# TCGplayer-sourced sv2/sv7/sv8/sv3pt5 profiles (`medium`). thepricedex reports odds as "1 in X
+# packs" per rarity; converting to probability and summing came to ~107.7% instead of 100%, so
+# these are renormalized proportionally to sum to exactly 1.0 (same recipe as every other
+# thepricedex-sourced profile in this project).
+#
+# Unlike the six other thepricedex-sourced SWSH-era profiles (swsh1/2/3/4/5/6/8), this set's own
+# page reports reverse-holo odds directly (Reverse Rare Holo 1/3.9, Reverse Uncommon 1/3.1,
+# Reverse Common 1/2.8) -- so the reverse_holo slot below is sourced from Pokemon GO's own data,
+# not borrowed from swsh3 as a same-era approximation. This set has no plain "Rare" rarity (only
+# "Rare Holo" as the base hit), so there is no reverse-Rare outcome to include.
+#
+# NOT modeled: box-level collation guarantees (none declared) and the guaranteed Energy card slot.
+# thepricedex's own page states this is an 11-card pack (10 modeled here + 1 guaranteed Energy
+# card), but this project's ingested card catalog for pgo has zero Energy-supertype cards, so
+# there's no priced card row to attach that 11th slot's probability to -- same reasoning as
+# sv3pt5.yaml's unmodeled Foil Energy slot.
+#
+# Also a special product: Pokemon GO was sold only as standalone booster packs, no booster box
+# SKU exists for it (docs/07-data-backlog.md 2b) -- this profile only covers per-pack pull rates;
+# box-less sealed-cost modeling is a separate, still-open concern in docs/04-optimizer-spec.md's
+# cost math, unrelated to whether this YAML is sourced.
+#
+# Data-quality note: this project's ingested card_variant rows for pgo's Rare Ultra/Rare
+# Rainbow/Rare Secret were, like the SWSH-era sets, mostly unpriced due to the same
+# card->product name-matching gap (docs/07-data-backlog.md 3). Re-running `bb ingest prices
+# --group 3064` after the strip_known_treatment_suffix fix brought coverage to 14 of 18 cards
+# across those three rarities; the 4 residual cases are different, harder name-mismatch patterns
+# (e.g. tcgcsv's "Mewtwo VSTAR 79 Secret" combines the card's own number and a treatment word in a
+# way the current matcher doesn't unwind, and one is an accented-character drop in "PokéStop") not
+# attempted as part of this pass.
+
+set: pgo
+name: "Pokemon GO - standard booster"
+cards_per_pack: 10
+confidence: low
+sample_packs: null
+source_urls:
+  - https://www.thepricedex.com/set/pgo/pokemon-go/pull-rates
+notes: >
+  thepricedex.com, community-aggregated estimates (see header comment for the full caveat).
+  Rare-or-better odds as published (1 in X packs): Rare Secret 1/63, Rainbow Rare 1/38.7,
+  Ultra Rare 1/19.4, Rare Holo VSTAR 1/40, Rare Holo VMAX 1/53, Rare Holo V 1/6,
+  Radiant Rare 1/17, Rare Holo 1/1.4. Reverse-holo odds as published: Reverse Rare Holo 1/3.9,
+  Reverse Uncommon 1/3.1, Reverse Common 1/2.8 (both renormalized to sum to 1.0 within each slot).
+  Least trusted figures: the whole profile, frankly -- unlike sv2/sv7/sv8/sv3pt5 this is a
+  third-party aggregation of unverified community research, not a first-party study. Treat as a
+  starting point, not a settled number.
+
+slots:
+  - index: 1
+    label: common
+    repeat: 5
+    outcomes:
+      - {rarity: "Common", probability: 1.0}
+
+  - index: 6
+    label: uncommon
+    repeat: 3
+    outcomes:
+      - {rarity: "Uncommon", probability: 1.0}
+
+  - index: 9
+    label: reverse_holo
+    repeat: 1
+    outcomes:
+      - {rarity: "Rare Holo", probability: 0.273932, variant: reverse_holofoil}
+      - {rarity: "Uncommon", probability: 0.344516, variant: reverse_holofoil}
+      - {rarity: "Common", probability: 0.381552, variant: reverse_holofoil}
+
+  - index: 10
+    label: rare_or_better
+    repeat: 1
+    outcomes:
+      - {rarity: "Rare Secret", probability: 0.014739, variant: holofoil}
+      - {rarity: "Rare Rainbow", probability: 0.023998, variant: holofoil}
+      - {rarity: "Rare Ultra", probability: 0.047878, variant: holofoil}
+      - {rarity: "Rare Holo VSTAR", probability: 0.023215, variant: holofoil}
+      - {rarity: "Rare Holo VMAX", probability: 0.017520, variant: holofoil}
+      - {rarity: "Rare Holo V", probability: 0.154765, variant: holofoil}
+      - {rarity: "Radiant Rare", probability: 0.054623, variant: holofoil}
+      - {rarity: "Rare Holo", probability: 0.663262, variant: holofoil}
+
+box_constraints: []

@@ -11,6 +11,7 @@ from app.config import get_settings
 from app.db import SessionLocal
 from app.ingest.cards import ingest_sets_and_cards
 from app.ingest.pokemontcg import PokemonTcgCardSource
+from app.ingest.pokemontcg_github import PokemonTcgGithubMirrorSource
 from app.ingest.prices import ingest_group_prices, resolve_group_set_pairs
 from app.ingest.pullrates import load_pull_rate_profiles, sync_pull_rates_to_db
 from app.ingest.sealed_map import (
@@ -50,13 +51,30 @@ def ingest_cards(
         None, "--set", help="ptcg_set_id, e.g. sv8. Repeatable."
     ),
     all_sets: bool = typer.Option(False, "--all", help="Ingest every set from pokemontcg.io."),
+    source_name: str = typer.Option(
+        "pokemontcg",
+        "--source",
+        help=(
+            "Card metadata source: 'pokemontcg' (live API, default) or 'github-mirror' "
+            "(PokemonTCG/pokemon-tcg-data GitHub mirror -- use when the live API is hard-down "
+            "for a set, see docs/03-data-sources.md)."
+        ),
+    ),
 ) -> None:
     """Pull card metadata from pokemontcg.io."""
     if bool(set_id) == all_sets:
         console.print("[red]Pass exactly one of --set (repeatable) or --all.[/red]")
         raise typer.Exit(code=1)
 
-    source = PokemonTcgCardSource()
+    if source_name == "pokemontcg":
+        source: PokemonTcgCardSource | PokemonTcgGithubMirrorSource = PokemonTcgCardSource()
+    elif source_name == "github-mirror":
+        source = PokemonTcgGithubMirrorSource()
+    else:
+        console.print(
+            f"[red]Unknown --source {source_name!r}. Use 'pokemontcg' or 'github-mirror'.[/red]"
+        )
+        raise typer.Exit(code=1)
     db = SessionLocal()
     try:
         results = ingest_sets_and_cards(db, source, None if all_sets else list(set_id or []))

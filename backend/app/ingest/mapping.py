@@ -58,6 +58,43 @@ def strip_disambiguating_number(clean_name: str, card_number: str | None) -> str
     return clean_name
 
 
+_KNOWN_TREATMENT_SUFFIXES = (
+    "full art",
+    "alternate full art",
+    "rainbow rare",
+    "rainbow",
+    "secret rare",
+    "alternate art secret",
+    "secret",
+    "gold rare",
+    "gold",
+    "alternate art",
+    "alt art",
+)
+
+
+def strip_known_treatment_suffix(clean_name: str) -> str:
+    """Undo tcgcsv's habit of appending a card's special-treatment name (e.g. 'Full Art',
+    'Rainbow Rare') to `cleanName` to disambiguate it from a regular-print card sharing the same
+    base name in the same set -- pokemontcg.io's name for the special-treatment card is just the
+    plain Pokemon name (e.g. tcgcsv's 'Dhelmise V (Full Art)' becomes cleanName 'Dhelmise V Full
+    Art', but pokemontcg.io calls it 'Dhelmise V'). Only strips a known, finite whitelist of
+    treatment words tcgcsv actually uses, and only as a trailing suffix, so it can never clip a
+    Pokemon name that happens to contain one of these words elsewhere.
+
+    Picks the *longest* matching suffix rather than the first one in the whitelist, since some
+    entries are prefixes of others (e.g. 'full art' is a suffix of 'alternate full art') -- taking
+    the shorter one first would strip too little and leave a residual word ('Alternate') that
+    still fails to match.
+    """
+    lowered = clean_name.lower()
+    matches = [s for s in _KNOWN_TREATMENT_SUFFIXES if lowered.endswith(" " + s)]
+    if not matches:
+        return clean_name
+    longest = max(matches, key=len)
+    return clean_name[: -(len(longest) + 1)]
+
+
 def match_cards_in_set(cards, products) -> list[MatchResult]:
     """Match each card in a set to its tcgcsv product, on normalized number then verified name.
 
@@ -85,7 +122,11 @@ def match_cards_in_set(cards, products) -> list[MatchResult]:
         name_matches = [
             p
             for p in candidates
-            if normalize_name(strip_disambiguating_number(p.clean_name, p.card_number))
+            if normalize_name(
+                strip_known_treatment_suffix(
+                    strip_disambiguating_number(p.clean_name, p.card_number)
+                )
+            )
             == card_name
         ]
 
