@@ -1,6 +1,20 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { useDeleteGoal, useGoalDetail } from "../lib/queries";
 import { formatMoney } from "../lib/types";
+import {
+  Button,
+  ButtonLink,
+  Callout,
+  ErrorState,
+  LoadingState,
+  Page,
+  PageHeader,
+  Stat,
+  Table,
+  Td,
+  Th,
+  Tr,
+} from "../components/ui";
 
 export default function GoalDetailPage() {
   const { goalId } = useParams<{ goalId: string }>();
@@ -9,92 +23,82 @@ export default function GoalDetailPage() {
   const { data: goal, isLoading } = useGoalDetail(id);
   const deleteGoal = useDeleteGoal();
 
-  if (isLoading) return <p className="p-6 text-neutral-500">Loading...</p>;
-  if (!goal) return <p className="p-6 text-neutral-500">Goal not found.</p>;
+  if (isLoading) return <LoadingState />;
+  if (!goal) return <ErrorState message="Goal not found." />;
 
   const needed = goal.items.filter((i) => i.need_qty > 0);
 
   return (
-    <div className="mx-auto max-w-4xl p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">{goal.name}</h1>
-          <p className="text-xs uppercase tracking-wide text-neutral-500">
-            {goal.goal_type.replace("_", " ")}
-          </p>
-        </div>
-        <button
+    <Page width="narrow">
+      <PageHeader
+        title={goal.name}
+        subtitle={`${goal.goal_type.replace("_", " ")} · target condition ${goal.target_condition}`}
+        back={{ to: "/goals", label: "Goals" }}
+      >
+        <ButtonLink to={`/goals/${goal.id}/simulate`}>Run optimizer</ButtonLink>
+        <Button
+          variant="danger"
           onClick={() => deleteGoal.mutate(goal.id, { onSuccess: () => navigate("/goals") })}
-          className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
+          disabled={deleteGoal.isPending}
         >
-          Delete goal
-        </button>
-      </div>
+          Delete
+        </Button>
+      </PageHeader>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label="Cards needed" value={String(goal.cost.n_cards)} />
-        <StatCard label="Subtotal" value={formatMoney(goal.cost.subtotal)} />
-        <StatCard
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Stat label="Cards needed" value={String(goal.cost.n_cards)} />
+        <Stat label="Subtotal" value={formatMoney(goal.cost.subtotal)} />
+        <Stat
           label="Shipping"
-          value={`${formatMoney(goal.cost.shipping)} (${goal.cost.orders} orders)`}
+          value={formatMoney(goal.cost.shipping)}
+          hint={`${goal.cost.orders} orders`}
         />
-        <StatCard label="Total" value={formatMoney(goal.cost.total)} />
+        <Stat label="Singles total" value={formatMoney(goal.cost.total)} tone="positive" />
       </div>
 
       {goal.unpriced_count > 0 && (
-        <p className="mt-3 text-xs text-amber-600">
-          {goal.unpriced_count} needed card(s) have no current price and are excluded from the
-          total above.
-        </p>
+        <Callout className="mt-3.5">
+          {goal.unpriced_count} needed card{goal.unpriced_count === 1 ? "" : "s"} have no current
+          price and are excluded from the total above.
+        </Callout>
       )}
 
-      <div className="mt-8 overflow-hidden rounded-lg border border-neutral-200 bg-white">
-        <table className="w-full text-sm">
-          <thead className="border-b border-neutral-200 bg-neutral-50 text-left text-xs uppercase text-neutral-500">
-            <tr>
-              <th className="px-3 py-2">#</th>
-              <th className="px-3 py-2">Card</th>
-              <th className="px-3 py-2">Variant</th>
-              <th className="px-3 py-2">Rarity</th>
-              <th className="px-3 py-2 text-right">Price</th>
-              <th className="px-3 py-2 text-right">Needed</th>
-            </tr>
-          </thead>
-          <tbody>
-            {needed.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-neutral-400">
-                  Everything in this goal is already owned.
-                </td>
-              </tr>
-            ) : (
-              needed.map((item) => (
-                <tr key={item.card_variant_id} className="border-b border-neutral-100 last:border-0">
-                  <td className="px-3 py-2 text-neutral-500">{item.number}</td>
-                  <td className="px-3 py-2 font-medium text-neutral-800">{item.card_name}</td>
-                  <td className="px-3 py-2 text-neutral-600">{item.variant}</td>
-                  <td className="px-3 py-2 text-neutral-600">{item.rarity ?? "—"}</td>
-                  <td className="px-3 py-2 text-right text-neutral-600">
-                    {formatMoney(item.market_price)}
-                  </td>
-                  <td className="px-3 py-2 text-right font-medium text-neutral-800">
-                    {item.need_qty}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-neutral-200 bg-white p-4">
-      <div className="text-xs text-neutral-500">{label}</div>
-      <div className="mt-1 text-lg font-semibold text-neutral-900">{value}</div>
-    </div>
+      <h2 className="mb-3 mt-8 text-[14px] font-semibold text-ink">Still needed</h2>
+      <Table
+        head={
+          <>
+            <Th className="w-16">#</Th>
+            <Th>Card</Th>
+            <Th>Variant</Th>
+            <Th>Rarity</Th>
+            <Th className="text-right">Price</Th>
+            <Th className="text-right">Need</Th>
+          </>
+        }
+      >
+        {needed.length === 0 ? (
+          <Tr>
+            <Td colSpan={6} className="py-10 text-center text-[12.5px] text-ink-3">
+              Everything in this goal is already owned.
+            </Td>
+          </Tr>
+        ) : (
+          needed.map((item) => (
+            <Tr key={item.card_variant_id}>
+              <Td className="font-mono text-[11.5px] text-accent-text">{item.number}</Td>
+              <Td className="font-medium text-ink">{item.card_name}</Td>
+              <Td className="text-ink-3">{item.variant}</Td>
+              <Td className="text-ink-3">{item.rarity ?? "—"}</Td>
+              <Td className="text-right font-mono text-[12px]">
+                {formatMoney(item.market_price)}
+              </Td>
+              <Td className="text-right font-mono text-[12px] font-medium text-ink">
+                {item.need_qty}
+              </Td>
+            </Tr>
+          ))
+        )}
+      </Table>
+    </Page>
   );
 }

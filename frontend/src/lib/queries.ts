@@ -8,8 +8,13 @@ import type {
   GoalOut,
   PortfolioSummaryOut,
   PortfolioValuePointOut,
+  SealedProductOut,
+  SensitivityIn,
+  SensitivityOut,
   SetDetailOut,
   SetOut,
+  SimulateIn,
+  SimulateResponseOut,
 } from "./types";
 
 export function useSets() {
@@ -93,5 +98,35 @@ export function useDeleteGoal() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["goals"] });
     },
+  });
+}
+
+export function useSealedProducts(ptcgSetId: string | undefined) {
+  return useQuery({
+    queryKey: ["sets", ptcgSetId, "sealed-products"],
+    queryFn: () => api<SealedProductOut[]>(`/sets/${ptcgSetId}/sealed-products`),
+    enabled: !!ptcgSetId,
+  });
+}
+
+/** A real compute call, not a cached read -- a mutation even though it doesn't change server
+ * state, so each "Run optimizer" click is explicit and re-triggerable rather than memoized. */
+export function useRunSimulation(goalId: number | undefined) {
+  return useMutation({
+    mutationFn: (body: SimulateIn) =>
+      api<SimulateResponseOut>(`/goals/${goalId}/simulate`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+  });
+}
+
+export function useRunSensitivity(goalId: number | undefined) {
+  return useMutation({
+    mutationFn: (body: SensitivityIn) =>
+      api<SensitivityOut>(`/goals/${goalId}/sensitivity`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
   });
 }

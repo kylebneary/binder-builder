@@ -74,13 +74,18 @@ matches a spot-check against TCGplayer within a few percent.
 `bb ingest prices` / `bb sync sealedmap` have now all been run for real against live pokemontcg.io
 and tcgcsv data, not just fixtures. Results:
 
-- **166 of 174 ptcg sets ingested.** The other 8 -- `smp`, `sv1`, `sv10`, `sve`, `swsh7`, `xy3`,
-  `xy4`, `xyp` -- failed pokemontcg.io across four escalating retry passes (1s/3s/5s/20s backoff),
-  a harder failure than this API's usual occasional-outage flakiness. `scripts/import_offline_cards.py`
-  (+ `app/ingest/pokemontcg_offline.py`) exists as a manual fallback: hand-download the same JSON
-  the CLI would fetch and import it from disk. At some point, worth looking into an alternative
-  source for these 8 (e.g. the `PokemonTCG/pokemon-tcg-data` GitHub mirror) instead of continuing
-  to retry the same flaky endpoint.
+- **174 of 174 ptcg sets ingested.** 166 came from the live API directly; the other 8 -- `smp`,
+  `sv1`, `sv10`, `sve`, `swsh7`, `xy3`, `xy4`, `xyp` -- failed pokemontcg.io across four escalating
+  retry passes (1s/3s/5s/20s backoff), a harder failure than this API's usual occasional-outage
+  flakiness. Resolved 2026-08-25 via a new `app/ingest/pokemontcg_github.py` adapter
+  (`PokemonTcgGithubMirrorSource`) that reads the same card/set JSON from the
+  `PokemonTCG/pokemon-tcg-data` GitHub mirror instead (`bb ingest cards --source github-mirror
+  --set <id>`) -- all 8 fetched cleanly on the first attempt. `data/set_map.yaml` already had
+  tcgcsv group mappings for all 8; `bb sync setmap` + `bb ingest prices` linked them and pulled
+  real prices. See `docs/03-data-sources.md`'s "Fallback: the pokemontcg-data GitHub mirror" and
+  `docs/07-data-backlog.md` §1 for detail. `scripts/import_offline_cards.py` (+
+  `app/ingest/pokemontcg_offline.py`) still exists as a last-resort manual fallback if the mirror
+  is ever down too.
 - `data/set_map.yaml`: 173 entries. Two set pairs -- `tk1a`/`tk1b` and `tk2a`/`tk2b` (the old EX
   Trainer Kit half-decks) -- can never be mapped: tcgcsv sells each pair as one combined product
   with overlapping card numbers between the two decks, and `Set.tcgplayer_group_id` is unique per
@@ -110,10 +115,10 @@ cost distribution and a sensitivity chart, and the analytic-agreement test passe
 - [x] 2.7 `sim/montecarlo.py` — vectorised NumPy engine, box constraints, seeded RNG.
 - [x] 2.8 Test suite from `docs/04-optimizer-spec.md` (all six categories).
 - [x] 2.9 Performance pass to the 100k-trials-in-2s target.
-- [ ] 2.10 Strategy search: grid for ≤2 product types, greedy for more.
-- [ ] 2.11 Objectives: expected cost, p90 cost, budget-constrained completion.
-- [ ] 2.12 `simulation_run` persistence and cache.
-- [ ] 2.13 UI: results view — strategy ranking, cost histogram, singles baseline delta,
+- [x] 2.10 Strategy search: grid for ≤2 product types, greedy for more.
+- [x] 2.11 Objectives: expected cost, p90 cost, budget-constrained completion.
+- [x] 2.12 `simulation_run` persistence and cache.
+- [x] 2.13 UI: results view — strategy ranking, cost histogram, singles baseline delta,
       assumptions panel with inline editing.
 - [ ] 2.14 Sensitivity/tornado analysis and the "recommendation is not robust" warning.
 - [ ] 2.15 Shopping list export in TCGplayer Mass Entry format.
@@ -133,9 +138,10 @@ correctly in a real browser (Playwright), not just via the API. `bb sync pullrat
 skips `_TEMPLATE.yaml`/`EXAMPLE-*.yaml` and reports nothing to sync, since no real profile had
 been authored yet at that point -- see 2.5, below.
 
-**2.5 shipped (2026-08-25):** authored 10 real profiles, all sourced and confidence-rated,
-covering every set from the owner's actual collection CSV that (a) is already ingested and (b)
-doesn't hit the Trainer-Gallery/Galarian-Gallery schema gap described below.
+**2.5 shipped (2026-08-25):** authored 10 real profiles initially (`swsh4` and `pgo` followed
+later the same day -- see below), all sourced and confidence-rated, covering every set from the
+owner's actual collection CSV that (a) is already ingested and (b) doesn't hit the
+Trainer-Gallery/Galarian-Gallery schema gap described below.
 
 *`confidence: medium`* -- `sv2` (Paldea Evolved), `sv3pt5` (151), `sv7` (Stellar Crown), `sv8`
 (Surging Sparks, superseding the old illustrative `EXAMPLE-sv8.yaml`, now deleted). Hit-rarity
@@ -157,10 +163,10 @@ itself cites "community research" (a disclosed 5,000-pack Reddit sample for Chil
 Each YAML's header says so plainly and is explicit that "the whole profile" is the least-trusted
 figure, not just one field. The reverse-holo-slot split for all six is taken from thepricedex's
 Darkness Ablaze page (the only one of the six with reverse-card odds) and reused as a same-era
-approximation for the other five, not re-derived per set. All ten profiles pass `bb sync
+approximation for the other five (and, later, for `swsh4` too). All profiles pass `bb sync
 pullrates` against the live DB and are idempotent on resync; the full test suite stays green.
 
-Three things were found and deliberately *not* forced into a profile, rather than papered over:
+Two things were found and deliberately *not* forced into a profile, rather than papered over:
 - **Crown Zenith** (`swsh12pt5`) has real 1,900-pack TCGplayer data available but hits a genuine
   schema gap: its hit slot draws from the separate `swsh12pt5gg` Galarian Gallery set, which
   `pull_rate_profile`'s single-`set_id` design can't represent -- see the new note in
@@ -168,21 +174,34 @@ Three things were found and deliberately *not* forced into a profile, rather tha
   SWSH-era Trainer Gallery set (Brilliant Stars, Astral Radiance, Lost Origin, Silver Tempest)
   and to Shining Fates' Shiny Vault subset -- a schema change, not more research, is the
   prerequisite.
-- **Pokémon GO** (`pgo`) -- despite being the owner's single most-collected set by card count --
-  has no TCGplayer article and nothing on thepricedex either; no source clearing even the relaxed
-  "low confidence, real numbers" bar was found. It's also a special product (sold only as
-  standalone packs, no booster box), which would need its own box-less cost-model handling later
-  regardless.
-- **Vivid Voltage** (`swsh4`) was skipped: it introduced the one-off "Amazing Rare" rarity, which
-  none of the sources found (TCGplayer or thepricedex) account for, and fabricating that
-  probability from nothing would misrepresent the set's actual card pool.
+- **Vivid Voltage** (`swsh4`) was initially skipped: it introduced the one-off "Amazing Rare"
+  rarity, which the sources checked at the time (TCGplayer, thepricedex) appeared not to account
+  for. **Revisited and authored 2026-08-25** (`docs/07-data-backlog.md` 2b): a second look at
+  thepricedex.com found a Vivid Voltage page after all, with Amazing Rare odds included -- the
+  earlier pass had simply missed it. See `data/pull_rates/swsh4.yaml`.
+
+**Pokémon GO** (`pgo`) was also initially skipped -- despite being the owner's single
+most-collected set by card count, no TCGplayer article and (it seemed) nothing on thepricedex
+either. **Revisited and authored 2026-08-25**, same as `swsh4`: thepricedex does have a `pgo`
+page after all, covering every rarity including the set-specific "Radiant Rare", and -- unlike
+every SWSH-era profile above -- it reports its own reverse-holo odds directly rather than needing
+a borrowed split. See `data/pull_rates/pgo.yaml`. It remains a special case in one other way,
+unrelated to pull rates: sold only as standalone packs with no booster-box SKU, so it'll still
+need box-less sealed-cost handling in `docs/04-optimizer-spec.md`'s cost math before a goal for
+this set can price a sealed strategy.
+
+12 profiles total as of 2026-08-25 (10 initial + `swsh4` + `pgo`).
 
 Pre-existing data-quality finding, unrelated to pull rates but discovered while cross-checking
-these: every SWSH-era set checked (`swsh1`/`2`/`3`/`5`/`6`/`8`, likely all of them) has `card`
-rows for Rare Ultra/Rare Rainbow/Rare Secret but **zero** priced `card_variant` rows for those
-same rarities -- a real ingest gap (the cards exist, nothing prices them), noted here rather than
-silently worked around. It doesn't block pull-rate sync (validation only checks `card.rarity`),
-but it means need-list cost for those specific cards will show as unpriced until it's fixed.
+these: every SWSH-era set checked (`swsh1`/`2`/`3`/`4`/`5`/`6`/`8`, likely all of them) plus `pgo`
+has `card` rows for Rare Ultra/Rare Rainbow/Rare Secret but **zero** priced `card_variant` rows
+for those same rarities -- a real ingest gap (the cards exist, nothing prices them), noted here
+rather than silently worked around. It doesn't block pull-rate sync (validation only checks
+`card.rarity`), but it means need-list cost for those specific cards will show as unpriced until
+it's fixed. **Root-caused and mostly fixed 2026-08-25** -- see `docs/07-data-backlog.md` §3: it
+was `app/ingest/mapping.py` failing to recognize tcgcsv's special-treatment naming suffixes
+("Full Art", "Rainbow Rare", etc.), not a missing source; coverage across the 8 sets went from
+0 of 302 to 291 of 302 after adding `strip_known_treatment_suffix()` and re-ingesting.
 
 **2.6 shipped (2026-08-25):** `sim/analytic.py` implements `per_pack_probability` (P(a given pool
 card appears in a given pack), combining every contributing slot outcome multiplicatively so a
@@ -253,6 +272,98 @@ owned-card exclusion, profile resolution (default vs. explicit override), and bo
 (including missing `packs_per_unit` and `box_constraint` mapping). Full suite: 130 passing (1
 slow test deselected by default).
 
+**2.10-2.12 shipped (2026-08-25):** `sim/optimizer.py` implements `search` (ranked
+`(Strategy, SimResult)` pairs, always including the singles-only baseline; exhaustive grid for
+<=2 sealed products, greedy marginal analysis + a +-1 local-search polish for 3+) and
+`sensitivity` (tornado analysis: top-3 needed chase-rarity pull rates at +/-50%,
+`liquidation_rate` 0.5-0.85, sealed unit price +/-20%; `robust: bool` flags whether any
+perturbation flips which of the strategy/singles-baseline is cheaper). Two precision/scope
+decisions worth flagging:
+- **Two-phase precision in `search`.** Candidate generation and initial ranking run at a
+  lower `n_trials` (capped at 5,000) for speed; the top 3 candidates plus the baseline are
+  re-simulated at the caller's full `n_trials` before the final ranking is returned. A real
+  trade-off (coarse-phase noise could misorder two very close candidates before refinement
+  corrects it), documented in the function's docstring rather than silent.
+- **Price-basis (low/market/high) sensitivity is deferred to Milestone D.** `build_card_pool`
+  gained a `price_field` parameter so the service layer can build alternate pools for this later;
+  `sim/optimizer.py` can't call `get_current_prices` itself (DB-oblivious per
+  `docs/01-architecture.md`), and wiring that orchestration in now would anticipate UI work not
+  yet built. The other three sensitivity factors ship now since they're self-contained within
+  `sim/`.
+
+New `services/simulation_runs.py` is the caching/persistence layer: `compute_cache_key` hashes
+`(goal, strategy, params, n_trials, seed, price_date, profile_version)` per the spec's "cache
+aggressively" note -- one `simulation_run` row per evaluated strategy point, so a repeated search
+over an already-cached point is free. `price_date` uses the global max `price_point.observed_on`
+(the daily price job ingests everything in one batch, so this is a fair proxy) rather than
+per-product dates. `run_search_and_cache` resolves every sealed product for the goal's set that
+shares its profile with the set's `is_default` profile into a `BoxSpec`, reporting (never
+silently dropping) any that aren't simulatable and why.
+
+New `POST /api/v1/goals/{goal_id}/simulate` (body: `objective`, `n_trials`, `seed`,
+`sealed_product_ids`, optional `CostParams` overrides) and `bb sim run <goal_id>` both wrap
+`run_search_and_cache`. Verified end-to-end against the real ingested DB: `bb sim run 1` (the
+existing `sv8` master-set goal) against the already-curated real `packs_per_unit` sealed products
+for that set (single-pack products; the Booster Box itself is still uncurated in
+`data/sealed_map.yaml`, per the Phase 1 backlog) -- singles-only baseline reported **$1338.92
+mean**, exactly matching the plain need-list total from the 2.1-2.4 shipped note above, confirming
+the `uncovered_needed_price_sum` reconciliation design holds in practice. Every real sealed
+product for `sv8` came back slightly more expensive than singles-only, consistent with the spec's
+"Expected finding" that sealed usually loses.
+
+13 new tests: `test_sim_optimizer.py` (baseline inclusion, grid picks the cheaper synthetic
+strategy, greedy activates at 3+ products, results sorted by objective, sensitivity reports
+`robust`/factors), `test_service_simulation_runs.py` (persistence, cache hit/miss on changed
+params, unsimulatable-product reporting), plus an API smoke test in the new
+`test_api_simulate.py`. Full suite: 147 passing (1 slow deselected).
+
+**2.13 shipped (2026-08-25):** `GET /sets/{ptcg_set_id}/sealed-products` (new
+`services/sets.list_sealed_products`) lists every sealed product for a set with current price and
+a `has_pull_rate_profile` flag, so the UI can grey out products that would otherwise just come
+back in `run_search_and_cache`'s `unsimulatable` list. `frontend/src/pages/GoalSimulatePage.tsx`
+(route `/goals/:goalId/simulate`, linked from a new "Run optimizer" button on
+`GoalDetailPage.tsx`) is the results view: a sealed-product picker, objective selector and
+editable `liquidation_rate`/`resale_floor`, a ranked-strategies table (mean/p90/completion%/delta
+vs. singles, best strategy highlighted), and a cost histogram (`recharts` `BarChart`, reusing the
+same lazy-chunk-splitting pattern `PortfolioPage.tsx` already uses since `recharts` is a large
+dependency). `SimResultOut` gained `histogram_counts`/`histogram_edges` fields (present in
+`results_json` since 2.10-2.12 but not previously exposed over the API) to feed the chart.
+
+Verified in a real headless-Chromium browser (Playwright) against the real ingested DB, not just
+via the API: navigated to the `sv8` master-set goal, opened the simulate page, ran the optimizer
+with defaults, and confirmed the picker correctly greys out the ~15 uncurated sealed products
+(Booster Box included -- still unmapped in `data/sealed_map.yaml`), the ranked table reproduces
+the same `$1338.92` singles-only baseline as the CLI verification above, and the histogram renders
+(a single sharp spike for the singles-only strategy, which is the *correct* shape -- singles-only
+has no pack-pull randomness at all, all of the model's variance comes from opening packs). Zero
+console errors. `npm run build` (tsc typecheck + vite build) clean.
+
+**2.14/2.15 backend shipped (2026-08-26); UI wiring pending.** `sim/optimizer.sensitivity()`
+gained a `price_basis_pools` parameter -- the low/market/high perturbation deferred in the 2.10-2.12
+note above -- fed by `build_card_pool`'s existing `price_field` parameter via a new
+`services/simulation_runs.run_sensitivity()` (not persisted as a `simulation_run` row; it's a
+multi-simulation derived analysis, not a single reproducible run, so it would need its own
+cache-key shape to be worth caching). New `POST /goals/{id}/sensitivity` and `bb goal
+export-mass-entry <goal_id> [--path FILE]` (implemented against a new `services/goals.
+mass_entry_text()`, also backing a new `GET /goals/{id}/export/mass-entry`). Verified for real:
+`bb goal export-mass-entry 1` against the live `sv8` master-set goal produced exactly 411 lines,
+matching the goal's known needed-card count.
+
+Frontend wiring (tornado chart + "not robust" banner on `GoalSimulatePage.tsx`, an "Export
+shopping list" button on `GoalDetailPage.tsx`) was written and briefly verified working in a real
+browser, but is **not committed**: a concurrent session was mid-flight on an app-wide design-system
+pass (new `components/ui.tsx`, theming, dark mode) touching the same pages, and staging those
+files now would sweep in that unrelated, at-the-time-still-building work. The sensitivity logic
+survived that pass's later rewrite of `GoalSimulatePage.tsx` (it kept `useRunSensitivity` and the
+tornado data intact under the new component library), but `GoalDetailPage.tsx`'s rewrite happened
+against an older copy and dropped the export button entirely -- it needs re-adding, ideally by
+whichever session finishes that redesign so it matches the new design system rather than getting
+bolted on and re-lost. The backend capabilities are complete and independently usable via the CLI
+and API either way.
+
+15 new tests across `test_sim_optimizer.py`, `test_service_simulation_runs.py`,
+`test_service_goals.py`, and `test_api_simulate.py`. Full suite: 160 passing (1 slow deselected).
+
 ## Phase 3 — Binder designer
 
 **Branch:** `feat/phase-3-binder`
@@ -286,27 +397,28 @@ pockets.
 ## Suggested next session for Claude Code
 
 Phases 0 and 1 are done (see the outstanding real-data step noted under Phase 1, above -- do that
-by hand or in the next session before trusting the numbers). Phase 2's 2.1-2.9 are all done (see
-the notes under Phase 2, above): goal creation, the need list, its plain singles cost, ten real
-pull-rate profiles, and both the closed-form `sim/analytic.py` oracle and the vectorised
-`sim/montecarlo.py` engine (box constraints, seeded RNG, the 100k-trials-in-2s performance bar
-met and benchmarked). `services/simulate.py` is the DB <-> sim boundary that builds `CardPool`/
-`BoxSpec` for a goal and a sealed product. Full suite: 130 passing.
+by hand or in the next session before trusting the numbers). Phase 2's backend is entirely done
+(2.1-2.15, see the notes under Phase 2 above): goal creation and cost model, real pull-rate
+profiles, the closed-form and vectorised simulation engines, strategy search/objectives/
+persistence, sensitivity analysis with price-basis perturbation, and shopping-list export --
+all verified against the real DB via the CLI and API. Full suite: 160 passing (1 slow deselected).
 
-Next is Milestone B: 2.10 (`sim/optimizer.py`'s `search` -- grid for <=2 sealed products, greedy
-for more, always including the singles-only baseline), 2.11 (the four objectives already stubbed
-as the `Objective` enum), and 2.12 (`simulation_run` persistence/caching, keyed on
-`(goal, strategy, params, n_trials, seed, price_date, profile_version)`). This is the layer that
-turns "can simulate one strategy" into "tell me what to buy" -- wire it into the already-stubbed
-`bb sim run <goal_id>` CLI command and a new `POST /goals/{id}/simulate` API route. Remember
-`build_card_pool`'s `uncovered_needed_price_sum` (2.7's note above) needs to be added as a flat
-offset to every strategy's reported NetCost so totals stay reconciled with the plain need-list
-view -- easy to forget since it doesn't show up in any Milestone A test (none of the real profiles
-have an uncovered-rarity gap today).
+What's left in Phase 2 is entirely frontend: `GoalSimulatePage.tsx` needs a tornado `BarChart`
+wired to the now-real `POST /goals/{id}/sensitivity` (a "not robust" banner when `robust=False`
+-- the spec calls this "not optional"), and `GoalDetailPage.tsx` needs an "Export shopping list"
+button hitting `GET /goals/{id}/export/mass-entry` and downloading the response as a blob. Both
+were built and briefly verified once already but aren't committed -- see the 2.14/2.15 note above
+for why (a concurrent design-system pass was mid-flight on the same files). Check whether that
+pass has since finished and merged before redoing this: if `components/ui.tsx` and friends exist
+on `main`, rebuild the sensitivity panel and export button against those components rather than
+the plain-Tailwind style the rest of this codebase used through 2.13.
 
-No real `box_constraint` data exists yet for exercising 2.7's guarantee code path against
-anything but a synthetic fixture -- worth researching one set for this, or accepting
-synthetic-only coverage until a source turns up. This doesn't block Milestone B.
+No real `box_constraint` data exists yet for exercising `sim/montecarlo.py`'s guarantee code path
+against anything but a synthetic fixture -- worth researching one set for this, or accepting
+synthetic-only coverage until a source turns up. This doesn't block anything above. Separately,
+`data/sealed_map.yaml` still has zero curated `booster_box` entries (only single-pack products
+are classified) -- worth curating at least one real booster box for a profiled set so `bb sim
+run`'s output includes the product collectors actually ask about.
 
 Separately, if picking up pull-rate authoring again: the Trainer-Gallery/Galarian-Gallery schema
 gap (see the Phase 2 note above and `docs/02-data-model.md`'s Pull-rate model section) blocks

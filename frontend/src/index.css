@@ -1,3 +1,212 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * Design tokens for the two themes in the Claude Design mockups:
+ *   light = "Warm paper"  -- paper stock, ink-blue accents, Instrument Sans
+ *   dark  = "Dark studio" -- near-black, mint accents, Space Grotesk
+ *
+ * The two themes are NOT a colour inversion of each other: they use different display
+ * typefaces and different accent hues by design. Everything below is consumed through the
+ * semantic names in tailwind.config.js (bg-surface, text-ink-3, border-line, ...), so no
+ * component ever names a raw hex.
+ */
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  --font-sans: "Instrument Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --canvas: #f4f2ee;
+  --canvas-glow: none;
+  --surface: #fdfcfa;
+  --raised: #f7f5f1;
+  --inset: #efece6;
+  --well: #f4f2ee;
+
+  --line: #e0dcd4;
+  --line-strong: #d4cec3;
+  --line-card: #cdc6ba;
+
+  --text: #1e1c19;
+  --text-2: #3b3833;
+  /* Darkened from the mockup's #7a746b: at the mockup value this is 4.14:1 on canvas,
+     under WCAG AA for the 10-12px mono labels used throughout. */
+  --text-3: #6f6961;
+  /* Likewise #948d83 was 2.94:1. */
+  --text-4: #7a736a;
+
+  --accent: #3b6ea8;
+  --accent-fg: #fdfcfa;
+  --accent-text: #2d5687;
+  --accent-surface: #eef2f7;
+  --accent-line: #c6d5e6;
+  --accent-deep: #23456b;
+
+  --warn: #b3803a;
+  --warn-text: #8c6229;
+  --warn-surface: #f6eddf;
+  --warn-line: #e6d3b4;
+  --warn-fg: #2a1e0b;
+
+  /* No red in the mockups; these are mixed to sit in the same warm family. */
+  --danger: #a8443a;
+  --danger-text: #8f3a31;
+  --danger-surface: #f7ece9;
+  --danger-line: #e6cdc8;
+
+  --track: #dcd6cc;
+  --track-muted: #b3aca1;
+  --nav-active: #eae6df;
+  /* Active segment of a segmented control, and the tinted "result" hero panel. */
+  --seg-active: #fdfcfa;
+  --seg-active-shadow: 0 1px 2px rgba(60, 50, 35, 0.1);
+  --accent-panel: linear-gradient(#eef2f7, #eef2f7);
+
+  /* Card-back hatching used for placeholders and unplaced cards. */
+  --hatch-a: #e8e3da;
+  --hatch-b: #ded8ce;
+
+  --shadow-card: 0 1px 3px rgba(60, 50, 35, 0.14);
+  --shadow-panel: 0 1px 2px rgba(60, 50, 35, 0.06);
+  --shadow-lift: 0 16px 30px rgba(60, 50, 35, 0.28);
+  --shadow-hero: 0 10px 26px rgba(60, 50, 35, 0.18);
+  --glow: 0 0 0 4px rgba(59, 110, 168, 0.12);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --font-sans: "Space Grotesk", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --canvas: #0e1013;
+  --canvas-glow: radial-gradient(120% 80% at 50% 0%, #161a21 0%, #0e1013 70%);
+  --surface: #111419;
+  --raised: #151a20;
+  --inset: #0e1216;
+  --well: #14181e;
+
+  --line: #22262d;
+  --line-strong: #262b33;
+  --line-card: #333b45;
+
+  --text: #e8eaed;
+  --text-2: #c7ccd4;
+  --text-3: #8b929d;
+  --text-4: #7b838f;
+
+  --accent: #5fd6a5;
+  --accent-fg: #0b1a14;
+  --accent-text: #5fd6a5;
+  --accent-surface: #1a2b24;
+  --accent-line: #2f4b40;
+  --accent-deep: #2f7f63;
+
+  --warn: #e8b166;
+  --warn-text: #e8b166;
+  --warn-surface: #2b2419;
+  --warn-line: #4a3a22;
+  --warn-fg: #14100a;
+
+  --danger: #e3796d;
+  --danger-text: #e3796d;
+  --danger-surface: #2b1c1a;
+  --danger-line: #4a2b27;
+
+  --track: #252c34;
+  --track-muted: #4a5560;
+  --nav-active: #1e242c;
+  --seg-active: #252c34;
+  --seg-active-shadow: none;
+  --accent-panel: linear-gradient(#1a2b24, #151a20);
+
+  --hatch-a: #262d36;
+  --hatch-b: #1d232b;
+
+  --shadow-card: 0 2px 10px rgba(0, 0, 0, 0.5);
+  --shadow-panel: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  --shadow-lift: 0 18px 36px rgba(0, 0, 0, 0.7);
+  --shadow-hero: 0 10px 30px rgba(0, 0, 0, 0.55);
+  --glow: 0 0 0 4px rgba(95, 214, 165, 0.12);
+}
+
+@layer base {
+  body {
+    @apply bg-canvas font-sans text-ink antialiased;
+  }
+
+  /* Native controls inherit the sheet, not the UA default. */
+  input,
+  select,
+  textarea,
+  button {
+    font-family: inherit;
+  }
+
+  ::selection {
+    background: var(--accent-surface);
+    color: var(--accent-text);
+  }
+}
+
+@layer components {
+  /* Diagonal card-back hatch: placeholder art, unplaced cards, missing images. */
+  .hatch {
+    background: repeating-linear-gradient(
+      135deg,
+      var(--hatch-a) 0 6px,
+      var(--hatch-b) 6px 12px
+    );
+  }
+
+  .hatch-lg {
+    background: repeating-linear-gradient(
+      135deg,
+      var(--hatch-a) 0 8px,
+      var(--hatch-b) 8px 16px
+    );
+  }
+
+  /* The mockups set every small uppercase label in mono with wide tracking. */
+  .label-mono {
+    @apply font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-ink-3;
+  }
+}
+
+@layer base {
+  /*
+   * Visible keyboard focus. Element+pseudo-class beats Tailwind's `.outline-none` on
+   * specificity, so the fields in ui.tsx keep their focus ring even though the utility
+   * clears the UA outline. Bulk entry is a keyboard-first screen -- this is not optional.
+   */
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  summary:focus-visible,
+  [tabindex]:focus-visible,
+  [role="button"]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* Mouse users never see it; the rule above is the only focus affordance. */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

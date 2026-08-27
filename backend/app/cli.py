@@ -21,12 +21,16 @@ from app.ingest.sealed_map import (
 )
 from app.ingest.set_mapping import load_set_map, sync_set_map_to_db
 from app.ingest.tcgcsv import TcgCsvPriceSource
+from app.models import SealedProduct
 from app.models import Set as SetModel
 from app.models.enums import GoalType
 from app.services import goals as goals_service
 from app.services.collection import get_or_create_default_collection
 from app.services.csv_export import export_collection_csv
 from app.services.csv_import import apply_import, dry_run_import, parse_csv
+from app.services.simulation_runs import run_search_and_cache
+from app.sim.optimizer import Objective
+from app.sim.types import CostParams
 
 app = typer.Typer(help="binder-builder")
 ingest_app = typer.Typer(help="Data ingestion")
@@ -375,6 +379,34 @@ def goal_need_list(goal_id: int) -> None:
     )
 
 
+@goal_app.command("export-mass-entry")
+def goal_export_mass_entry(
+    goal_id: int,
+    path: str | None = typer.Option(
+        None, "--path", help="Write to this file instead of printing to stdout."
+    ),
+) -> None:
+    """Export a goal's still-needed cards in TCGplayer Mass Entry format (one '<qty> <name>'
+    line per card)."""
+    db = SessionLocal()
+    try:
+        collection = get_or_create_default_collection(db)
+        detail = goals_service.get_goal_need_list(db, goal_id, collection.id)
+    finally:
+        db.close()
+
+    if detail is None:
+        console.print(f"[red]No goal with id {goal_id}.[/red]")
+        raise typer.Exit(code=1)
+
+    text = goals_service.mass_entry_text(detail)
+    if path:
+        Path(path).write_text(text, encoding="utf-8")
+        console.print(f"Wrote {path}")
+    else:
+        console.print(text, end="")
+
+
 @sim_app.command("run")
 def sim_run(
     goal_id: int,
@@ -383,7 +415,65 @@ def sim_run(
     seed: int = 0,
 ) -> None:
     """Optimize a completion goal and print the ranked strategies."""
-    raise NotImplementedError  # TODO(phase-2.10)
+    try:
+        parsed_objective = Objective(objective)
+    except ValueError:
+        console.print(
+            f"[red]Unknown objective {objective!r}. Use one of: "
+            f"{', '.join(o.value for o in Objective)}.[/red]"
+        )
+        raise typer.Exit(code=1) from None
+
+    db = SessionLocal()
+    try:
+        try:
+            result = run_search_and_cache(
+                db, goal_id, parsed_objective, CostParams(), n_trials=trials, seed=seed
+            )
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(code=1) from exc
+
+        product_names = {
+            p.id: p.name
+            for p in db.execute(select(SealedProduct)).scalars().all()
+        }
+    finally:
+        db.close()
+
+    if result.unsimulatable:
+        console.print("[yellow]Not simulatable:[/yellow]")
+        for u in result.unsimulatable:
+            console.print(f"  {u['name']} -- {u['reason']}")
+
+    baseline = next((r for r in result.runs if not r.strategy_json), None)
+    baseline_mean = baseline.results_json["mean"] if baseline else None
+
+    console.print(f"Goal {goal_id} -- objective: {parsed_objective.value}")
+    for run in result.runs:
+        if run.strategy_json:
+            label = ", ".join(
+                f"{qty}x {product_names.get(int(pid), pid)}"
+                for pid, qty in run.strategy_json.items()
+            )
+        else:
+            label = "singles only"
+        r = run.results_json
+        delta = (
+            f" ({r['mean'] - baseline_mean:+.2f} vs. singles)"
+            if baseline_mean is not None and run.strategy_json
+            else ""
+        )
+        console.print(
+            f"  {label}: mean ${r['mean']:.2f}, p90 ${r['p90']:.2f}{delta}"
+        )
+
+    if result.uncovered_needed_price_sum:
+        console.print(
+            f"[yellow]${result.uncovered_needed_price_sum} of needed cards are outside this "
+            "profile's rarity coverage and not reflected above -- add it by hand to any total "
+            "you use.[/yellow]"
+        )
 
 
 if __name__ == "__main__":

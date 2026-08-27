@@ -138,6 +138,102 @@ export interface GoalDetailOut {
   unpriced_count: number;
 }
 
+export interface SealedProductOut {
+  id: number;
+  name: string;
+  product_type: string;
+  packs_per_unit: number | null;
+  msrp: string | null;
+  market_price: string | null;
+  has_pull_rate_profile: boolean;
+}
+
+export type Objective =
+  | "min_expected_cost"
+  | "min_p90_cost"
+  | "max_completion_under_budget"
+  | "min_cost_for_target_completion";
+
+export interface SimulateIn {
+  objective?: Objective;
+  n_trials?: number;
+  seed?: number;
+  sealed_product_ids?: number[] | null;
+  shipping_per_order?: number;
+  cards_per_order?: number;
+  sealed_shipping?: number;
+  sales_tax_rate?: number;
+  liquidation_rate?: number;
+  resale_floor?: number;
+  bulk_threshold?: number;
+}
+
+export interface StrategyOut {
+  units: Record<string, number>; // sealed_product_id (as string, JSON object key) -> qty
+}
+
+export interface SimResultOut {
+  mean: number;
+  sd: number;
+  p10: number;
+  p50: number;
+  p90: number;
+  p95: number;
+  p_complete_from_sealed: number;
+  expected_cards_remaining: number;
+  n_trials: number;
+  seed: number;
+  histogram_counts: number[];
+  histogram_edges: number[];
+}
+
+export interface RankedStrategyOut {
+  simulation_run_id: number;
+  strategy: StrategyOut;
+  result: SimResultOut;
+}
+
+export interface UnsimulatableProductOut {
+  sealed_product_id: number;
+  name: string;
+  reason: string;
+}
+
+export interface SimulateResponseOut {
+  goal_id: number;
+  objective: string;
+  ranked: RankedStrategyOut[];
+  unsimulatable: UnsimulatableProductOut[];
+  uncovered_needed_price_sum: string;
+}
+
+export interface SensitivityIn {
+  sealed_product_ids: Record<number, number>;
+  n_trials?: number;
+  seed?: number;
+  shipping_per_order?: number;
+  cards_per_order?: number;
+  sealed_shipping?: number;
+  sales_tax_rate?: number;
+  liquidation_rate?: number;
+  resale_floor?: number;
+  bulk_threshold?: number;
+}
+
+export interface SensitivityFactorOut {
+  name: string;
+  baseline_cost: number;
+  low_cost: number;
+  high_cost: number;
+}
+
+export interface SensitivityOut {
+  robust: boolean;
+  baseline_mean: number;
+  strategy_mean: number;
+  factors: SensitivityFactorOut[];
+}
+
 export function parseMoney(value: string | null): number | null {
   if (value === null) return null;
   const n = Number(value);

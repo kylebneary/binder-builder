@@ -215,3 +215,11 @@ def get_goal_need_list(
         cost=cost,
         unpriced_count=unpriced_count,
     )
+
+
+def mass_entry_text(detail: GoalDetail) -> str:
+    """TCGplayer Mass Entry format: one '<qty> <card name>' line per still-needed item. Used by
+    both `bb goal export-mass-entry` and `GET /goals/{id}/export/mass-entry` so the formatting
+    logic lives in one place rather than duplicated between the CLI and the UI's download."""
+    lines = [f"{item.need_qty} {item.card_name}" for item in detail.items if item.need_qty > 0]
+    return "\n".join(lines) + ("\n" if lines else "")
