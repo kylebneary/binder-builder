@@ -1,5 +1,6 @@
 """Typer CLI. Every optimizer/ingest capability must be reachable here without the UI."""
 
+import json
 from datetime import date
 from pathlib import Path
 
@@ -7,6 +8,7 @@ import typer
 from rich.console import Console
 from sqlalchemy import select
 
+from app.binder.layout import AutoLayoutMode
 from app.config import get_settings
 from app.db import SessionLocal
 from app.ingest.cards import ingest_sets_and_cards
@@ -24,7 +26,9 @@ from app.ingest.tcgcsv import TcgCsvPriceSource
 from app.models import SealedProduct
 from app.models import Set as SetModel
 from app.models.enums import GoalType
+from app.services import binder as binder_service
 from app.services import goals as goals_service
+from app.services.binder import BinderData, LayoutError
 from app.services.collection import get_or_create_default_collection
 from app.services.csv_export import export_collection_csv
 from app.services.csv_import import apply_import, dry_run_import, parse_csv
@@ -39,12 +43,14 @@ sync_app = typer.Typer(help="Sync curated YAML into the database")
 import_app = typer.Typer(help="Import collection data from other tools")
 export_app = typer.Typer(help="Export collection data")
 goal_app = typer.Typer(help="Completion goals")
+binder_app = typer.Typer(help="Binder designer")
 app.add_typer(ingest_app, name="ingest")
 app.add_typer(sim_app, name="sim")
 app.add_typer(sync_app, name="sync")
 app.add_typer(import_app, name="import")
 app.add_typer(export_app, name="export")
 app.add_typer(goal_app, name="goal")
+app.add_typer(binder_app, name="binder")
 
 console = Console()
 
@@ -474,6 +480,227 @@ def sim_run(
             "profile's rarity coverage and not reflected above -- add it by hand to any total "
             "you use.[/yellow]"
         )
+
+
+@binder_app.command("create")
+def binder_create(
+    name: str = typer.Option(..., "--name", help="Human-readable binder name."),
+    rows: int = typer.Option(3, "--rows", help="Pocket rows per page."),
+    cols: int = typer.Option(3, "--cols", help="Pocket columns per page."),
+    pages: int = typer.Option(20, "--pages", help="Number of pages."),
+    top_loading: bool = typer.Option(
+        False,
+        "--top-loading",
+        help="Top-loading pages. Gutter-spanning inserts are refused in these.",
+    ),
+    gutter_mm: int = typer.Option(6, "--gutter-mm", help="Gutter allowance between facing pages."),
+) -> None:
+    """Create an empty binder."""
+    db = SessionLocal()
+    try:
+        binder = binder_service.create_binder(
+            db,
+            BinderData(
+                name=name,
+                rows=rows,
+                cols=cols,
+                pages=pages,
+                is_side_loading=not top_loading,
+                gutter_mm=gutter_mm,
+            ),
+        )
+        loading = "side-loading" if binder.is_side_loading else "top-loading"
+        console.print(
+            f"Created binder {binder.id}: {binder.name!r} -- "
+            f"{binder.rows}x{binder.cols}, {binder.pages} pages, {loading}"
+        )
+    finally:
+        db.close()
+
+
+@binder_app.command("list")
+def binder_list() -> None:
+    """List binders."""
+    db = SessionLocal()
+    try:
+        binders = binder_service.list_binders(db)
+    finally:
+        db.close()
+    if not binders:
+        console.print("No binders yet -- create one with `bb binder create --name ...`.")
+        return
+    for b in binders:
+        console.print(f"  {b.id}: {b.name!r} -- {b.rows}x{b.cols}, {b.pages} pages")
+
+
+@binder_app.command("auto-layout")
+def binder_auto_layout(
+    binder_id: int,
+    set_id: str = typer.Option(..., "--set", help="ptcg_set_id, e.g. sv8."),
+    mode: str = typer.Option("set-order", "--mode", help="set-order | rarity-tiered"),
+    master: bool = typer.Option(
+        False, "--master", help="Place every printing, not just the canonical variant."
+    ),
+    skip_reverse_holos: bool = typer.Option(
+        False, "--skip-reverse-holos", help="Leave reverse holos out of the layout."
+    ),
+    group_by_rarity: bool = typer.Option(
+        False, "--group-by-rarity", help="Group by rarity within set order."
+    ),
+    start_subset_on_new_page: bool = typer.Option(
+        False, "--subset-pages", help="Start each numbering subset (TG, GG, SV) on a fresh page."
+    ),
+    append: bool = typer.Option(
+        False, "--append", help="Keep existing placements instead of replacing the layout."
+    ),
+) -> None:
+    """Fill a binder from a set in card-number or rarity order."""
+    try:
+        parsed_mode = AutoLayoutMode(mode.replace("-", "_"))
+    except ValueError:
+        console.print(f"[red]Unknown mode {mode!r} -- use 'set-order' or 'rarity-tiered'.[/red]")
+        raise typer.Exit(code=1) from None
+
+    db = SessionLocal()
+    try:
+        set_row = db.execute(
+            select(SetModel).where(SetModel.ptcg_set_id == set_id)
+        ).scalar_one_or_none()
+        if set_row is None:
+            console.print(
+                f"[red]No set with ptcg_set_id={set_id!r} -- "
+                f"run `bb ingest cards --set {set_id}` first.[/red]"
+            )
+            raise typer.Exit(code=1)
+        try:
+            result = binder_service.apply_auto_layout(
+                db,
+                binder_id,
+                set_row.id,
+                mode=parsed_mode,
+                canonical_only=not master,
+                skip_reverse_holos=skip_reverse_holos,
+                group_by_rarity=group_by_rarity,
+                start_subset_on_new_page=start_subset_on_new_page,
+                replace=not append,
+            )
+        except LookupError:
+            console.print(f"[red]No binder with id {binder_id}.[/red]")
+            raise typer.Exit(code=1) from None
+        except LayoutError as exc:
+            for error in exc.errors:
+                console.print(f"[red]{error}[/red]")
+            raise typer.Exit(code=1) from None
+    finally:
+        db.close()
+
+    console.print(
+        f"Placed {result.placed} cards across {result.pages_used} pages "
+        f"({parsed_mode.value})."
+    )
+    if result.unplaced:
+        console.print(
+            f"[yellow]{result.unplaced} cards did not fit -- the binder needs more pages.[/yellow]"
+        )
+    if result.skipped_no_variant:
+        console.print(
+            f"[yellow]{result.skipped_no_variant} cards in this set have no priced variant and "
+            "could not be placed at all -- ingest the set's prices to pick them up "
+            f"(`bb ingest prices --set {set_id}`).[/yellow]"
+        )
+
+
+@binder_app.command("show")
+def binder_show(binder_id: int) -> None:
+    """Print a binder page by page, flagging placements whose card is not in the collection."""
+    db = SessionLocal()
+    try:
+        layout = binder_service.get_binder_layout(db, binder_id)
+    finally:
+        db.close()
+
+    if layout is None:
+        console.print(f"[red]No binder with id {binder_id}.[/red]")
+        raise typer.Exit(code=1)
+
+    loading = "side-loading" if layout.is_side_loading else "top-loading"
+    console.print(
+        f"Binder {layout.id}: {layout.name!r} -- {layout.rows}x{layout.cols}, "
+        f"{layout.pages} pages, {loading}"
+    )
+    by_page: dict[int, list] = {}
+    for p in layout.placements:
+        by_page.setdefault(p.page_index, []).append(p)
+    for page_index in sorted(by_page):
+        console.print(f"  page {page_index}:")
+        for p in sorted(by_page[page_index], key=lambda p: (p.row, p.col)):
+            if p.kind == "card":
+                label = f"{p.number} {p.card_name} ({p.variant})"
+                owned = "" if p.is_owned else " [yellow]not owned[/yellow]"
+            elif p.kind == "insert":
+                label = f"insert #{p.insert_asset_id}"
+                owned = " (spans gutter)" if p.spans_gutter else ""
+            else:
+                label = "empty"
+                owned = ""
+            console.print(f"    ({p.row},{p.col}) {label}{owned}")
+    console.print(
+        f"{len(layout.placements)} placements, "
+        f"{layout.not_owned_count} of them not in the collection."
+    )
+
+
+@binder_app.command("export-json")
+def binder_export_json(
+    binder_id: int,
+    path: str | None = typer.Option(
+        None, "--path", help="Write to this file instead of printing to stdout."
+    ),
+) -> None:
+    """Export a binder layout as portable JSON."""
+    db = SessionLocal()
+    try:
+        payload = binder_service.export_layout_json(db, binder_id)
+    finally:
+        db.close()
+
+    if payload is None:
+        console.print(f"[red]No binder with id {binder_id}.[/red]")
+        raise typer.Exit(code=1)
+
+    text = json.dumps(payload, indent=2)
+    if path:
+        Path(path).write_text(text, encoding="utf-8")
+        console.print(f"Wrote {path}")
+    else:
+        print(text)
+
+
+@binder_app.command("import-json")
+def binder_import_json(
+    path: str,
+    binder_id: int | None = typer.Option(
+        None, "--binder", help="Replace this binder's layout instead of creating a new binder."
+    ),
+) -> None:
+    """Import a layout JSON file exported by `bb binder export-json`."""
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    db = SessionLocal()
+    try:
+        binder = binder_service.import_layout_json(db, payload, binder_id=binder_id)
+    except LookupError:
+        console.print(f"[red]No binder with id {binder_id}.[/red]")
+        raise typer.Exit(code=1) from None
+    except LayoutError as exc:
+        for error in exc.errors:
+            console.print(f"[red]{error}[/red]")
+        raise typer.Exit(code=1) from None
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from None
+    finally:
+        db.close()
+    console.print(f"Imported into binder {binder.id}: {binder.name!r}")
 
 
 if __name__ == "__main__":

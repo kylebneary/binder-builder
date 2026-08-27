@@ -176,7 +176,27 @@ index, and materialising empty pages just creates rows to keep in sync. Pages ar
 
 Placements are rectangles on the pocket grid. Enforce non-overlap in the service layer with an
 interval check, and add a DB-level uniqueness guard on the top-left `(binder_id, page_index, row,
-col)` as a cheap backstop.
+col)` as a cheap backstop. Both exist: `services.binder.apply_batch` runs the interval check over
+every affected spread before committing, and migration `a1f4c9d7e2b3` adds the unique index. The
+index only catches two placements claiming the same top-left pocket -- overlap between spans
+anchored at different cells is not expressible as a unique constraint and stays the service
+layer's job.
+
+`col` means one of two things depending on `spans_gutter`, and getting this wrong silently
+corrupts layouts:
+
+- `spans_gutter = false` -- `col` is **per page**, 0..cols-1.
+- `spans_gutter = true` -- the row is stored on the **even (left) page** of its spread and `col` is
+  in **spread** coordinates, 0..(2*cols)-1, so a single rectangle can straddle the gutter.
+
+`backend/app/binder/layout.py` documents the mapping and `to_spread_rect` implements it.
+
+### Foreign keys on SQLite
+
+SQLite ignores `ON DELETE CASCADE` unless `PRAGMA foreign_keys` is ON, and the pragma is
+per-connection, not per-database. `app/db.py` sets it via `enable_sqlite_foreign_keys` on every
+connection the app opens. Any code that builds its own SQLite engine -- the test fixtures do --
+must call it too, or cascades silently no-op there while working in production and on Postgres.
 
 ## Migration and idempotency
 

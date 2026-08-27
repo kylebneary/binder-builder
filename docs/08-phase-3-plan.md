@@ -155,6 +155,116 @@ true-aspect-ratio preview the way native HTML5 drag ghosts do.
   page, keyed to Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z. Keep it in the page component's state; do not
   reach for a state-management library.
 
+### What landed, and where it differs from the plan above
+
+Branch 1 is complete. Three deliberate deviations, each recorded because the plan text above says
+otherwise:
+
+1. **`auto_layout`, not `auto_layout_set_order`.** The plan called for one function with a `mode`
+   parameter, which is what shipped -- but keeping the `set_order` name on a function that also
+   does `RARITY_TIERED` would misdescribe it, so the stub was renamed rather than filled in.
+2. **`@dnd-kit/sortable` was not added.** The pocket grid is a free-form droppable grid and the
+   collection pool is not reorderable, so `sortable` had no call site. `@dnd-kit/core` alone is the
+   only new runtime dependency.
+3. **The spread renders as one grid, not two.** `SpreadView` draws both facing pages as a single
+   CSS grid of `2*cols + 1` columns, the middle column being the gutter at `gutter_mm / 70` of a
+   pocket width. Two side-by-side grids could not express a rectangle that crosses the gutter,
+   which is precisely what the backend's spread coordinates encode.
+
+Beyond the planned surface, `bb binder` also grew `list` and `import-json`, and the layout JSON
+carries `ptcg_card_id` + `variant` next to the local `card_variant_id` so an exported layout can
+be re-imported into a different database; import resolves by that stable pair and drops placements
+for cards the target database does not have.
+
+**Two defects the real data exposed, both fixed.** Neither was reachable from the synthetic
+fixtures, which is the argument for the plan's step-2 check against `data/binder_builder.db`:
+
+1. **`RARITY_ORDER` covered 13 of the 38 rarity strings the catalogue actually uses**, so 3,563
+   cards (17.6% of 20,479) fell to the alphabetical fallback -- which ranked `Promo` above
+   `Hyper Rare` and ordered `LEGEND` against `Radiant Rare` by spelling. The list now covers all
+   38 observed values, and `test_every_known_rarity_string_is_ordered` pins them so a future edit
+   cannot silently drop one. The real strings are messier than they look: `Rare Ultra` and
+   `Ultra Rare` are both live, and `MEGA_ATTACK_RARE` is SCREAMING_SNAKE while everything else is
+   title case.
+2. **Auto-layout silently omitted cards with no `card_variant` row.** Variants are derived from
+   the price feed, so a card the feed has never priced has nothing to place -- 4,808 cards
+   catalogue-wide, and disproportionately the chase cards (in Paldea Evolved it is all fourteen
+   Wo-Chien / Chi-Yu / Chien-Pao / Ting-Lu ex). `AutoLayoutResult` now carries
+   `skipped_no_variant`, surfaced by the CLI, the API and the designer, so the counts add up:
+   sv2 reports 265 placed + 14 skipped = its 279 cards. Counting it needed its own query rather
+   than `cards_in_set - cards_placed`, since that subtraction also sweeps in cards merely
+   filtered out by `canonical_only` -- a caller's choice, not a data gap.
+
+**A third defect, found while clearing the verification artifacts.** `DELETE /binders/{id}` was
+leaking rows: SQLite ships with `PRAGMA foreign_keys` OFF and applies it per connection, so all
+fifteen `ondelete="CASCADE"` clauses in `app/models` were inert and deleting a binder left its
+`binder_placement` rows behind pointing at nothing. Postgres enforces them, so the two supported
+engines were behaving differently -- exactly what the Postgres-compatibility rule in CLAUDE.md
+exists to prevent. `app/db.py` now exposes `enable_sqlite_foreign_keys` and applies it to the app
+engine; the three test fixtures that build their own SQLite engines call it too, or they would go
+on passing against behaviour production does not have. Pinned by
+`test_deleting_a_binder_removes_its_placements`. The whole suite still passes with enforcement on,
+so nothing else in the codebase was relying on the gap.
+
+**Verification status.** `pytest`: 237 passing, 1 slow deselected (baseline was 157), no
+regressions. `ruff check` clean on all new code. `npm run build` (tsc + vite) clean.
+
+Against the **real** database (20,479 cards, 174 sets, 1,505 collection items), restored from the
+2026-08-27 data package:
+
+- Migration `a1f4c9d7e2b3` applied to it cleanly; `alembic check` reports no drift and
+  `PRAGMA integrity_check` is `ok` with row counts unchanged. Note the package README says no
+  upgrade is needed -- true at `da02699`, but this branch adds a migration, so one *is* required.
+- Auto-layout placed all 249 sv8 canonical variants over 28 pages, and all 265 sv2 canonical
+  variants over 30; master mode placed all 441 sv2 variants; `--skip-reverse-holos` dropped
+  exactly the 176 reverse holos. Rarity-tiered on `swsh10` produced
+  Common -> Uncommon -> Rare -> Rare Holo -> Radiant Rare -> V -> VMAX -> VSTAR, one tier per page.
+- **The not-owned cross-check the plan asks for passes exactly.** sv2: 265 placements, 120 not
+  owned, against `bb goal need-list` reporting 120 needed -- and 265 - 120 = 145, the number of
+  sv2 rows in `collection_item` counted directly. Three independently-derived numbers agree.
+- A 265-placement layout round-tripped through JSON with identical placements and not-owned count.
+- Over HTTP against a running uvicorn: auto-layout, the 409-with-violations path, and the exact
+  swap and inverse-swap batches `BinderDesignerPage` emits -- the swap exchanged the two cards,
+  the inverse restored the original layout, and the placement count never moved.
+
+**The interactive browser pass was performed**, driving a real headless Chrome against the real
+database (`puppeteer-core` against the machine's installed Chrome, so no browser download and no
+new project dependency -- the harness lives outside the repo, see below). Fifteen checks: routes
+render, the spread draws 18 pockets at a measured 0.714 aspect ratio (5:7), the pool loads real
+cards, drag from pool into a pocket, drag a second into another pocket, drop-onto-occupied swaps,
+Ctrl+Z undoes, Ctrl+Shift+Z redoes, the server layout agrees with the DOM, the not-owned badge and
+header count render, and auto-layout fills from the UI. Zero uncaught page errors; the only console
+error is a 404 for `/favicon.ico`.
+
+**It immediately found two frontend defects that every static check had passed.** Both are fixed:
+
+1. **Cards landed in the wrong pocket.** dnd-kit defaults to `rectIntersection`, which ranks
+   droppables by area of overlap with the *dragged element's* rectangle. A pool card tile is far
+   wider than a pocket, so it straddled three at once and the leftmost won -- dropping a second
+   card onto an empty pocket silently overwrote the first card one pocket away. The captured
+   request proves it: aiming at `(row 0, col 1)` posted `{"row":0,"col":0}`. `BinderDesignerPage`
+   now uses `pointerWithin` with `closestCenter` as the keyboard-sensor fallback, so the drop
+   target is the pocket under the pointer.
+2. **Every empty pocket registered the same draggable id.** `BinderPocket` fell back to the
+   literal `placement:none` when a pocket held nothing, collapsing seventeen nodes onto one entry
+   in dnd-kit's registry. The id is now keyed by cell (`drag:pocket:p:r:c`), which is stable
+   whether or not the pocket is occupied.
+
+Neither was reachable from `pytest`, `tsc`, or a vite module-transform check: the batch the client
+*sent* was well-formed and the server applied it correctly. Only a real pointer drag could show
+that it was the wrong batch.
+
+**The harness was deliberately not kept.** It was a throwaway script driven by `puppeteer-core`
+against the machine's installed Chrome, run once and discarded; adding a second dependency tree
+and a brittle coordinate-drag suite was judged not worth it for this phase. The consequence is
+explicit: **the two frontend fixes above have no regression coverage.** `pointerWithin` collision
+detection in `BinderDesignerPage` and the per-cell draggable id in `BinderPocket` are load-bearing
+and nothing in the repo will fail if either is reverted. Anyone touching the drag-and-drop wiring
+should re-check it in a browser by hand: drag two different cards into two different pockets and
+confirm each lands where it was dropped.
+
+---
+
 ---
 
 ## Branch 2 — `feat/phase-3-binder-export`

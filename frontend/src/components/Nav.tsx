@@ -7,6 +7,7 @@ const LINKS = [
   { to: "/", label: "Sets", end: true },
   { to: "/portfolio", label: "Portfolio", end: false },
   { to: "/goals", label: "Goals", end: false },
+  { to: "/binders", label: "Binders", end: false },
 ];
 
 export default function Nav() {

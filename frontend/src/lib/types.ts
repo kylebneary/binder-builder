@@ -244,3 +244,96 @@ export function formatMoney(value: string | null): string {
   const n = parseMoney(value);
   return n === null ? "—" : `$${n.toFixed(2)}`;
 }
+
+/* ------------------------------------------------------------------- binder */
+
+export interface BinderIn {
+  name: string;
+  rows?: number;
+  cols?: number;
+  pages?: number;
+  is_side_loading?: boolean;
+  gutter_mm?: number;
+  notes?: string | null;
+}
+
+export interface BinderOut {
+  id: number;
+  name: string;
+  rows: number;
+  cols: number;
+  pages: number;
+  is_side_loading: boolean;
+  gutter_mm: number;
+  notes: string | null;
+}
+
+export type PlacementKind = "card" | "insert" | "empty";
+
+export interface PlacementIn {
+  page_index: number;
+  row: number;
+  col: number;
+  kind?: PlacementKind;
+  row_span?: number;
+  col_span?: number;
+  card_variant_id?: number | null;
+  insert_asset_id?: number | null;
+  spans_gutter?: boolean;
+  z_order?: number;
+}
+
+export interface PlacementCellIn {
+  page_index: number;
+  row: number;
+  col: number;
+}
+
+export interface PlacementBatchIn {
+  upserts?: PlacementIn[];
+  clears?: PlacementCellIn[];
+}
+
+export interface PlacementOut {
+  id: number;
+  page_index: number;
+  row: number;
+  col: number;
+  row_span: number;
+  col_span: number;
+  kind: PlacementKind;
+  card_variant_id: number | null;
+  insert_asset_id: number | null;
+  spans_gutter: boolean;
+  z_order: number;
+  card_name: string | null;
+  number: string | null;
+  rarity: string | null;
+  variant: string | null;
+  image_small: string | null;
+  image_large: string | null;
+  is_owned: boolean;
+}
+
+export interface BinderLayoutOut extends BinderOut {
+  placements: PlacementOut[];
+  not_owned_count: number;
+}
+
+export interface AutoLayoutIn {
+  set_id: number;
+  mode?: "set_order" | "rarity_tiered";
+  canonical_only?: boolean;
+  skip_reverse_holos?: boolean;
+  group_by_rarity?: boolean;
+  start_subset_on_new_page?: boolean;
+  replace?: boolean;
+}
+
+export interface AutoLayoutOut {
+  placed: number;
+  unplaced: number;
+  pages_used: number;
+  /** Cards in the set with no priced variant, so nothing could be placed for them at all. */
+  skipped_no_variant: number;
+}
