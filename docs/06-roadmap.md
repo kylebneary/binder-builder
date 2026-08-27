@@ -20,11 +20,17 @@ Never commit to `main`. One branch per slice, merged when its exit criteria are 
 | `feat/phase-1-set-mapping` | Tasks 1.5–1.6 |
 | `feat/phase-1-tracker-ui` | Tasks 1.7–1.14 |
 | `feat/phase-2-optimizer` | Phase 2 |
-| `feat/phase-3-binder` | Phase 3 |
+| `feat/phase-3-binder-core` | Tasks 3.1–3.3, 3.5, 3.11–3.13 |
+| `feat/phase-3-binder-export` | Tasks 3.4, 3.9, 3.10 |
+| `feat/phase-3-binder-michi` | Tasks 3.6–3.8 |
 
 Phase 1 is three branches rather than one on purpose. Set mapping (1.5–1.6) is research-shaped
 and will churn through many revisions; keeping it separate lets the schema and ingest work in
 `feat/phase-1-data-ingest` merge to `main` early instead of waiting behind it.
+
+Phase 3 is split for the same reason: the Michi work (3.6–3.8) is colour science and curation
+judgement, not coding, and will churn. Splitting it out lets the editor in `feat/phase-3-binder-core`
+merge and become usable first. See `docs/08-phase-3-plan.md` for the full sequencing.
 
 ---
 
@@ -365,12 +371,13 @@ Phase 2 (2.1-2.15) is now fully complete, backend and frontend.
 
 ## Phase 3 — Binder designer
 
-**Branch:** `feat/phase-3-binder`
+**Branches:** `feat/phase-3-binder-core`, `-export`, `-michi` (see the branching table above).
+Sequencing and per-branch detail: `docs/08-phase-3-plan.md`.
 
 **Exit:** the owner has designed a real binder, printed inserts from the PDF, and they fit the
 pockets.
 
-- [ ] 3.1 Models + migration: `binder`, `binder_page`, `binder_placement`, `insert_asset`.
+- [x] 3.1 Models + migration: `binder`, `binder_placement`, `insert_asset`.
 - [ ] 3.2 Layout service with overlap and gutter invariants.
 - [ ] 3.3 API + UI: create a binder, drag-and-drop pocket grid, spread preview.
 - [ ] 3.4 Insert upload, DPI validation, multi-pocket span placement.
@@ -382,6 +389,38 @@ pockets.
 - [ ] 3.10 Spread preview PNG export.
 - [ ] 3.11 "Not owned" badges and count.
 - [ ] 3.12 Undo/redo.
+- [ ] 3.13 Unique index on `binder_placement (binder_id, page_index, row, col)`.
+
+**Starting state (2026-08-27).** More of this phase is already on `main` than the checkboxes
+suggested, so the list above was corrected before starting:
+
+**3.1 is done.** `backend/app/models/binder.py` defines `Binder`, `InsertAsset` and
+`BinderPlacement`, and the baseline migration `c8364ca2a717` creates all three tables. The task
+text previously also named a `binder_page` table, which contradicts `docs/02-data-model.md` — "there
+is deliberately no `binder_page` table", because a page has no attributes of its own beyond its
+index and materialising empty pages just creates rows to keep in sync. The data model wins;
+`binder_page` has been struck from the task. What the baseline migration *did* miss is the
+`(binder_id, page_index, row, col)` uniqueness backstop the same doc calls for, which is now
+tracked separately as 3.13 and is the only new migration this phase needs.
+
+**3.2 is half done.** `Rect.overlaps` and `validate_page` in `backend/app/binder/layout.py` already
+implement the interval-overlap and bounds checks (tested in `test_layout.py`). The two remaining
+invariants — `kind=card` requires a `card_variant_id` / `kind=insert` requires an
+`insert_asset_id`, and gutter-spanning requires `binder.is_side_loading` — need the service layer,
+which does not exist yet: there is no `services/binder.py` and no binder API router, so the models
+are currently unreachable over HTTP.
+
+**3.7 has one of ~8 templates.** `data/binder_templates/hero_center_3x3.yaml` establishes the file
+format (named grid, typed slots, spans, `requires_side_loading`); nothing in Python parses it yet.
+
+Also already in place: `reportlab` and `pillow` are declared dependencies but imported nowhere, so
+3.9/3.10 need no new deps; `card.dominant_color_lab` already exists as a column for 3.6 to fill;
+and `settings.templates_dir` / `settings.image_cache_dir` are already configured (the latter
+unused). On the frontend there is no binder UI at all, but the design system shipped with Phase 1/2
+anticipated this phase — the `aspect-pocket` Tailwind token is defined and unused, `Segmented` is
+documented as being for the 3×3 / 3×4 / 2×2 grid switches, `.hatch` is documented as the "unplaced
+cards" placeholder, and `App.tsx` carries a `TODO(phase-3.3)` marker at the route insertion point.
+Compose that design system; do not rebuild it.
 
 ## Phase 4 — Polish (only if 1–3 are being used)
 
@@ -403,7 +442,13 @@ persistence, sensitivity analysis with price-basis perturbation and the tornado-
 shopping-list export with its "Export shopping list" button -- all verified against the real DB
 via the CLI, API, and a real browser. Full suite: 157 passing (1 slow deselected).
 
-Phase 3 (binder designer) is next per the roadmap order above.
+**Phase 3 (binder designer) is next, and has started.** Read `docs/08-phase-3-plan.md` first — it
+carries the branch split, the per-branch task breakdown, and the verification steps. In short:
+start on `feat/phase-3-binder-core` with the layout-service invariants (3.2) and the new
+`services/binder.py` + binder API router, since the models exist but nothing can reach them over
+HTTP yet. Then the drag-and-drop editor (3.3), which needs `@dnd-kit/core` added to the frontend —
+no drag-and-drop library is installed. Read the "Starting state" note under Phase 3 above before
+assuming any checkbox is accurate.
 
 No real `box_constraint` data exists yet for exercising `sim/montecarlo.py`'s guarantee code path
 against anything but a synthetic fixture -- worth researching one set for this, or accepting
@@ -428,3 +473,13 @@ Voltage are blocked on not having found adequate source data, not on schema.
    Design for NumPy from the first line rather than optimising later.
 3. **2.5, authoring pull-rate profiles.** This is research and judgement, not coding. Each set is
    an hour of reading community data and writing down what you believe and how confident you are.
+4. **3.9, the print export.** The only task in the project whose correctness is checked with a
+   ruler. Every other output can be wrong by a few percent and still be useful; an insert that is
+   2 mm off does not fit the pocket and the sheet of cardstock is wasted. Millimetres are the
+   stored unit and pixels are derived only at export time, per `docs/05-binder-spec.md`. Budget for
+   printing test sheets, and remember that printer "fit to page" scaling will silently invalidate
+   an otherwise correct PDF.
+5. **3.8, the Michi scoring function.** Like 2.5, this is judgement rather than coding — the code
+   is short and the weights are guesses until real spreads have been looked at. The one hard
+   technical constraint is that colour work happens in CIELAB with ΔE2000; RGB distance does not
+   match perception and produces visibly wrong colour-themed pages.
