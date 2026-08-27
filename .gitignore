@@ -29,3 +29,6 @@ dist/
 
 # transfer leftovers
 _to_delete/
+# Data packages carried between dev machines. The .db is already covered by *.db, but the
+# CSVs inside are not -- and pokemon_cards.csv maps where each card physically sits.
+data/binder-builder-data-*/
