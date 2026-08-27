@@ -119,6 +119,28 @@ needs to build rarity pools and the binder needs to render.
 **Caveat:** it is a volunteer project with occasional multi-day outages. Cache aggressively; the
 card database changes only when a set releases.
 
+### Fallback: the `pokemontcg-data` GitHub mirror
+
+When the live API is hard-down for a specific set across retries (observed 2026-08-25: 8 sets
+failed four escalating retry passes with 500/502s), use
+`app/ingest/pokemontcg_github.py`'s `PokemonTcgGithubMirrorSource` instead of waiting it out —
+`bb ingest cards --source github-mirror --set <id>`. The `PokemonTCG/pokemon-tcg-data` GitHub repo
+publishes the identical card/set data as static JSON checked into git:
+
+```
+GET https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/sets/en.json
+GET https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/cards/en/{ptcg_set_id}.json
+```
+
+Same fields as the live API's card object, with two shape differences the adapter accounts for:
+the files are bare JSON arrays (no `{"data": [...]}` envelope, no pagination), and card objects
+don't embed a `set` object (so the adapter falls back to the requested `set_ref`). No rate limit,
+no observed downtime, since it's just raw file serving off GitHub's CDN. Not a permanent
+replacement for the live API — it won't have a set on the day it's revealed if the mirror hasn't
+synced yet — but a reliable fallback for exactly the "specific set is stuck failing" case.
+`app/ingest/pokemontcg_offline.py` (hand-download JSON, import from disk) still exists as a
+last-resort fallback if the mirror itself is ever unavailable too.
+
 ### Joining pokemontcg.io to tcgcsv
 
 There is no shared key. Match on `(set, card number, name)`:
@@ -126,7 +148,14 @@ There is no shared key. Match on `(set, card number, name)`:
    seeded by fuzzy-matching set names and release dates, then hand-corrected. There are ~170
    English sets; this is a bounded one-time cost.
 2. Within a set, match card `number` against `extendedData.Number` (strip the `/128` suffix and
-   leading zeros), then verify with a normalised name comparison.
+   leading zeros), then verify with a normalised name comparison. tcgcsv's `cleanName` sometimes
+   appends a special-treatment word to disambiguate a card from a same-named regular print in the
+   same set (e.g. "Dhelmise V" → cleanName "Dhelmise V Full Art"); `app/ingest/mapping.py`'s
+   `strip_known_treatment_suffix()` undoes a known, finite whitelist of these (found 2026-08-25
+   while investigating why SWSH-era Rare Ultra/Rainbow/Secret cards had zero priced variants —
+   see `docs/07-data-backlog.md` §3). It does not (yet) handle `&`-vs-"and" or hyphen-vs-space
+   differences in the base name itself — a handful of cards per set still fall through to the
+   review queue on those.
 3. Log unmatched cards to a review queue. Promos and special subsets will need manual mapping.
 
 Do not skip step 3. Silent mismatches produce confidently wrong prices, which is worse than a gap.
