@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useDeleteGoal, useGoalDetail } from "../lib/queries";
 import { formatMoney } from "../lib/types";
@@ -22,11 +23,31 @@ export default function GoalDetailPage() {
   const id = goalId ? Number(goalId) : undefined;
   const { data: goal, isLoading } = useGoalDetail(id);
   const deleteGoal = useDeleteGoal();
+  const [exporting, setExporting] = useState(false);
 
   if (isLoading) return <LoadingState />;
   if (!goal) return <ErrorState message="Goal not found." />;
 
   const needed = goal.items.filter((i) => i.need_qty > 0);
+
+  async function exportMassEntry() {
+    if (!goal) return;
+    setExporting(true);
+    try {
+      const res = await fetch(`/api/v1/goals/${goal.id}/export/mass-entry`);
+      if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+      const text = await res.text();
+      const blob = new Blob([text], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${goal.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-mass-entry.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   return (
     <Page width="narrow">
@@ -36,6 +57,9 @@ export default function GoalDetailPage() {
         back={{ to: "/goals", label: "Goals" }}
       >
         <ButtonLink to={`/goals/${goal.id}/simulate`}>Run optimizer</ButtonLink>
+        <Button variant="secondary" onClick={exportMassEntry} disabled={exporting || needed.length === 0}>
+          {exporting ? "Exporting..." : "Export shopping list"}
+        </Button>
         <Button
           variant="danger"
           onClick={() => deleteGoal.mutate(goal.id, { onSuccess: () => navigate("/goals") })}

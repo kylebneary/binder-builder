@@ -120,8 +120,8 @@ cost distribution and a sensitivity chart, and the analytic-agreement test passe
 - [x] 2.12 `simulation_run` persistence and cache.
 - [x] 2.13 UI: results view — strategy ranking, cost histogram, singles baseline delta,
       assumptions panel with inline editing.
-- [ ] 2.14 Sensitivity/tornado analysis and the "recommendation is not robust" warning.
-- [ ] 2.15 Shopping list export in TCGplayer Mass Entry format.
+- [x] 2.14 Sensitivity/tornado analysis and the "recommendation is not robust" warning.
+- [x] 2.15 Shopping list export in TCGplayer Mass Entry format.
 
 **2.1–2.4 shipped (2026-08-25):** `Goal`/`GoalItem`/`PullRateProfile`/`PackSlot`/`SlotOutcome`/
 `BoxConstraint` models and their baseline migration already existed from initial scaffolding, so
@@ -338,7 +338,7 @@ the same `$1338.92` singles-only baseline as the CLI verification above, and the
 has no pack-pull randomness at all, all of the model's variance comes from opening packs). Zero
 console errors. `npm run build` (tsc typecheck + vite build) clean.
 
-**2.14/2.15 backend shipped (2026-08-26); UI wiring pending.** `sim/optimizer.sensitivity()`
+**2.14/2.15 shipped (2026-08-26).** `sim/optimizer.sensitivity()`
 gained a `price_basis_pools` parameter -- the low/market/high perturbation deferred in the 2.10-2.12
 note above -- fed by `build_card_pool`'s existing `price_field` parameter via a new
 `services/simulation_runs.run_sensitivity()` (not persisted as a `simulation_run` row; it's a
@@ -349,20 +349,19 @@ mass_entry_text()`, also backing a new `GET /goals/{id}/export/mass-entry`). Ver
 `bb goal export-mass-entry 1` against the live `sv8` master-set goal produced exactly 411 lines,
 matching the goal's known needed-card count.
 
-Frontend wiring (tornado chart + "not robust" banner on `GoalSimulatePage.tsx`, an "Export
-shopping list" button on `GoalDetailPage.tsx`) was written and briefly verified working in a real
-browser, but is **not committed**: a concurrent session was mid-flight on an app-wide design-system
-pass (new `components/ui.tsx`, theming, dark mode) touching the same pages, and staging those
-files now would sweep in that unrelated, at-the-time-still-building work. The sensitivity logic
-survived that pass's later rewrite of `GoalSimulatePage.tsx` (it kept `useRunSensitivity` and the
-tornado data intact under the new component library), but `GoalDetailPage.tsx`'s rewrite happened
-against an older copy and dropped the export button entirely -- it needs re-adding, ideally by
-whichever session finishes that redesign so it matches the new design system rather than getting
-bolted on and re-lost. The backend capabilities are complete and independently usable via the CLI
-and API either way.
+Frontend wiring landed in two pieces once the concurrent app-wide design-system pass (new
+`components/ui.tsx`, theming, dark mode) merged to `main`. The tornado chart + "not robust" banner
+on `GoalSimulatePage.tsx` survived that redesign's later rewrite intact (it kept `useRunSensitivity`
+and the tornado data under the new component library) and shipped as part of that merge.
+`GoalDetailPage.tsx`'s rewrite happened against an older copy and dropped the export button
+entirely, so it was rebuilt from scratch against the new design system: an "Export shopping list"
+button that fetches `GET /goals/{id}/export/mass-entry` and downloads it as a `text/plain` blob.
+Verified in a real headless-Chromium browser against the live DB: no console errors, filename
+`surging-sparks-master-set-mass-entry.txt`, 410-line output matching the goal's live need list.
 
-15 new tests across `test_sim_optimizer.py`, `test_service_simulation_runs.py`,
-`test_service_goals.py`, and `test_api_simulate.py`. Full suite: 160 passing (1 slow deselected).
+15 new backend tests across `test_sim_optimizer.py`, `test_service_simulation_runs.py`,
+`test_service_goals.py`, and `test_api_simulate.py`. Full suite: 157 passing (1 slow deselected).
+Phase 2 (2.1-2.15) is now fully complete, backend and frontend.
 
 ## Phase 3 — Binder designer
 
@@ -397,21 +396,14 @@ pockets.
 ## Suggested next session for Claude Code
 
 Phases 0 and 1 are done (see the outstanding real-data step noted under Phase 1, above -- do that
-by hand or in the next session before trusting the numbers). Phase 2's backend is entirely done
-(2.1-2.15, see the notes under Phase 2 above): goal creation and cost model, real pull-rate
-profiles, the closed-form and vectorised simulation engines, strategy search/objectives/
-persistence, sensitivity analysis with price-basis perturbation, and shopping-list export --
-all verified against the real DB via the CLI and API. Full suite: 160 passing (1 slow deselected).
+by hand or in the next session before trusting the numbers). Phase 2 (2.1-2.15) is entirely done,
+backend and frontend (see the notes under Phase 2 above): goal creation and cost model, real
+pull-rate profiles, the closed-form and vectorised simulation engines, strategy search/objectives/
+persistence, sensitivity analysis with price-basis perturbation and the tornado-chart UI, and
+shopping-list export with its "Export shopping list" button -- all verified against the real DB
+via the CLI, API, and a real browser. Full suite: 157 passing (1 slow deselected).
 
-What's left in Phase 2 is entirely frontend: `GoalSimulatePage.tsx` needs a tornado `BarChart`
-wired to the now-real `POST /goals/{id}/sensitivity` (a "not robust" banner when `robust=False`
--- the spec calls this "not optional"), and `GoalDetailPage.tsx` needs an "Export shopping list"
-button hitting `GET /goals/{id}/export/mass-entry` and downloading the response as a blob. Both
-were built and briefly verified once already but aren't committed -- see the 2.14/2.15 note above
-for why (a concurrent design-system pass was mid-flight on the same files). Check whether that
-pass has since finished and merged before redoing this: if `components/ui.tsx` and friends exist
-on `main`, rebuild the sensitivity panel and export button against those components rather than
-the plain-Tailwind style the rest of this codebase used through 2.13.
+Phase 3 (binder designer) is next per the roadmap order above.
 
 No real `box_constraint` data exists yet for exercising `sim/montecarlo.py`'s guarantee code path
 against anything but a synthetic fixture -- worth researching one set for this, or accepting
