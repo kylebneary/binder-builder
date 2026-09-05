@@ -90,7 +90,7 @@ export default function BinderPocket({
     <div
       ref={setDropRef}
       style={style}
-      className={`aspect-pocket relative rounded-md border p-[3px] transition-colors ${
+      className={`group/pocket aspect-pocket relative rounded-md border p-[3px] transition-colors ${
         isOver
           ? "border-accent bg-accent-surface"
           : placement
@@ -119,7 +119,7 @@ export default function BinderPocket({
               type="button"
               onClick={() => onRemove(placement)}
               aria-label={`Remove ${placement.card_name ?? "placement"} from the binder`}
-              className="absolute right-[3px] top-[3px] hidden rounded bg-canvas/85 px-1.5 py-[1px] font-mono text-[11px] font-medium leading-tight text-ink-3 hover:text-danger-text focus-visible:block group-hover/spread:block"
+              className="absolute right-[3px] top-[3px] hidden rounded bg-canvas/85 px-1.5 py-[1px] font-mono text-[11px] font-medium leading-tight text-ink-3 hover:text-danger-text focus-visible:block group-hover/pocket:block"
             >
               &times;
             </button>

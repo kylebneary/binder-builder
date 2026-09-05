@@ -15,6 +15,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { PlacedCard, parsePocketId } from "../components/BinderPocket";
+import BinderContents from "../components/BinderContents";
 import SpreadView from "../components/SpreadView";
 import {
   Button,
@@ -328,7 +329,7 @@ export default function BinderDesignerPage() {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-        <div className="flex flex-col gap-5 lg:flex-row">
+        <div className="flex flex-col gap-5 xl:flex-row">
           <Panel className="flex w-full flex-none flex-col gap-3 p-4 lg:w-72">
             <SectionLabel>Collection pool</SectionLabel>
 
@@ -422,6 +423,15 @@ export default function BinderDesignerPage() {
 
             <SpreadView layout={layout} spreadIndex={spreadIndex} onRemove={handleRemove} />
           </Panel>
+
+          <div className="w-full flex-none xl:w-[24rem]">
+            <BinderContents
+              layout={layout}
+              spreadIndex={spreadIndex}
+              onJumpToSpread={setSpreadIndex}
+              onRemove={handleRemove}
+            />
+          </div>
         </div>
 
         <DragOverlay>

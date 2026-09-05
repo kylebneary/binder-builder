@@ -94,7 +94,7 @@ export default function SpreadView({
   }
 
   return (
-    <div className="group/spread">
+    <div>
       <div style={style}>
         {pockets}
         {spanning.map((p) => (
