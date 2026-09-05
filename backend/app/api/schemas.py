@@ -348,3 +348,30 @@ class AutoLayoutOut(BaseModel):
     unplaced: int
     pages_used: int
     skipped_no_variant: int = 0
+
+
+class HoldingOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    item_id: int
+    card_variant_id: int
+    card_id: int
+    ptcg_card_id: str
+    name: str
+    number: str
+    number_sort: int
+    set_id: int
+    set_name: str
+    ptcg_set_id: str
+    rarity: str | None
+    variant: str
+    condition: str
+    language: str
+    quantity: int
+    is_graded: bool
+    grade: str | None
+    storage_location: str | None
+    acquired_price: Decimal | None
+    market_price: Decimal | None
+    market_value: Decimal | None
+    image_small: str | None

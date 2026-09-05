@@ -337,3 +337,29 @@ export interface AutoLayoutOut {
   /** Cards in the set with no priced variant, so nothing could be placed for them at all. */
   skipped_no_variant: number;
 }
+
+/** One owned card, flattened for the holdings table. Mirrors HoldingOut. */
+export interface HoldingOut {
+  item_id: number;
+  card_variant_id: number;
+  card_id: number;
+  ptcg_card_id: string;
+  name: string;
+  number: string;
+  number_sort: number;
+  set_id: number;
+  set_name: string;
+  ptcg_set_id: string;
+  rarity: string | null;
+  variant: string;
+  condition: string;
+  language: string;
+  quantity: number;
+  is_graded: boolean;
+  grade: string | null;
+  storage_location: string | null;
+  acquired_price: string | null;
+  market_price: string | null;
+  market_value: string | null;
+  image_small: string | null;
+}

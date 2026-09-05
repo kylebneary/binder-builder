@@ -11,6 +11,7 @@ import type {
   GoalDetailOut,
   GoalIn,
   GoalOut,
+  HoldingOut,
   PlacementBatchIn,
   PlacementOut,
   PortfolioSummaryOut,
@@ -203,5 +204,14 @@ export function useAutoLayout(binderId: number | undefined) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["binders", binderId, "layout"] });
     },
+  });
+}
+
+/** The whole collection in one request. Sorting and filtering happen client-side -- see
+ * services/portfolio.list_holdings for why the payload is returned whole. */
+export function useHoldings() {
+  return useQuery({
+    queryKey: ["collection", "holdings"],
+    queryFn: () => api<HoldingOut[]>("/collection/holdings"),
   });
 }
