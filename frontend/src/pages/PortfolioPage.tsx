@@ -11,7 +11,7 @@ import {
 import { useHoldings, usePortfolio, usePortfolioHistory } from "../lib/queries";
 import type { HoldingGroupKey } from "../lib/types";
 import { DEFAULT_GROUP_KEYS, formatMoney, parseMoney } from "../lib/types";
-import HoldingsTable from "../components/HoldingsTable";
+import HoldingsPanel from "../components/HoldingsPanel";
 import { tooltipStyles, useChartColors } from "../lib/chartTheme";
 import {
   ErrorState,
@@ -78,7 +78,7 @@ export default function PortfolioPage() {
             Loading holdings
           </p>
         ) : (
-          <HoldingsTable holdings={holdings ?? []} groupBy={groupBy} onGroupByChange={setGroupBy} />
+          <HoldingsPanel holdings={holdings ?? []} groupBy={groupBy} onGroupByChange={setGroupBy} />
         )}
       </Panel>
     </Page>
