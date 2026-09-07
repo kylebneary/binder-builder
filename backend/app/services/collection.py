@@ -46,31 +46,48 @@ def list_collection_items(db: Session, collection_id: int) -> list[CollectionIte
 def upsert_collection_item(
     db: Session, collection_id: int, data: CollectionItemData
 ) -> CollectionItem:
-    """Upsert on the natural key from docs/02-data-model.md: (collection_id, card_variant_id,
-    condition, language, is_graded, grade) is one row, quantity on top of it. Setting quantity
-    to 0 keeps the row (a deliberate zero-of-this-variant is different from never having
-    recorded it) -- use delete_collection_item to actually remove a holding.
+    """Upsert a holding, keyed on the physical slot where one is known.
+
+    `collection_item` is one row per physical card (see the model docstring), so identity is
+    `(collection_id, storage_location)` whenever `data.storage_location` is set: the slot is the
+    thing that is unique, and keying on it is what lets the same file be re-imported without
+    duplicating every row. Fifteen copies of a card in fifteen slots are fifteen rows.
+
+    Without a location there is nothing physical to key on, so this falls back to the old natural
+    key -- (collection_id, card_variant_id, condition, language, is_graded, grade) -- and quantity
+    carries the count. That is the right shape for a Collectr or Deckbox export, which knows you
+    own four of a card but not where any of them sit.
+
+    Setting quantity to 0 keeps the row (a deliberate zero-of-this-variant is different from never
+    having recorded it) -- use delete_collection_item to actually remove a holding.
     """
-    row = db.execute(
-        select(CollectionItem).where(
-            CollectionItem.collection_id == collection_id,
+    if data.storage_location is not None:
+        key = (CollectionItem.storage_location == data.storage_location,)
+    else:
+        key = (
             CollectionItem.card_variant_id == data.card_variant_id,
             CollectionItem.condition == data.condition,
             CollectionItem.language == data.language,
             CollectionItem.is_graded == data.is_graded,
             CollectionItem.grade == data.grade,
+            CollectionItem.storage_location.is_(None),
+        )
+    row = db.execute(
+        select(CollectionItem).where(
+            CollectionItem.collection_id == collection_id,
+            *key,
         )
     ).scalar_one_or_none()
     if row is None:
-        row = CollectionItem(
-            collection_id=collection_id,
-            card_variant_id=data.card_variant_id,
-            condition=data.condition,
-            language=data.language,
-            is_graded=data.is_graded,
-            grade=data.grade,
-        )
+        row = CollectionItem(collection_id=collection_id)
         db.add(row)
+    # Keyed by slot, the card in it can change when a collection is reorganised, so every field
+    # is written on update rather than only at insert.
+    row.card_variant_id = data.card_variant_id
+    row.condition = data.condition
+    row.language = data.language
+    row.is_graded = data.is_graded
+    row.grade = data.grade
     row.quantity = data.quantity
     row.grader = data.grader
     row.acquired_price = data.acquired_price

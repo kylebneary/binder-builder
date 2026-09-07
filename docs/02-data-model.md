@@ -112,8 +112,37 @@ use it rather than re-deriving the max date.
 (`NM|LP|MP|HP|DMG`), language, is_graded, grader, grade, acquired_price (numeric null),
 acquired_on (date null), storage_location (text null), notes.
 
-Unique `(collection_id, card_variant_id, condition, language, is_graded, grade)` — one row per
-distinct holding, `quantity` on top.
+**One row per physical card, not per distinct holding.** A collector with fifteen copies of a card
+has fifteen rows, because each copy sits in its own slot and a row holds one `storage_location`.
+This replaced a `(collection_id, card_variant_id, condition, language, is_graded, grade)` unique
+constraint in migration `b7e2d5a91c04`; under that key, importing a file with one line per physical
+card silently collapsed duplicates and lost 1,723 of them (docs/07-data-backlog.md §4).
+
+Unique `(collection_id, storage_location)`, **partial on `storage_location IS NOT NULL`** — one
+slot holds one card, and the many rows with no recorded location must not all collide on NULL. The
+same `CREATE UNIQUE INDEX … WHERE` syntax works on SQLite and Postgres.
+
+`quantity` stays on the row for copies that are genuinely indistinguishable: an import whose file
+carries a quantity column but no locations (Collectr, Deckbox) writes one row of quantity N rather
+than fabricating N slots it does not know. **So a roll-up is always `SUM(quantity)`, never
+`COUNT(*)`.**
+
+Upsert identity is the slot whenever a location is known — which is what makes re-importing the
+same file idempotent rather than duplicating every row — and falls back to the old natural key when
+it is not. See `services/collection.upsert_collection_item`.
+
+#### Rolling physical cards back up
+View `collection_holding` groups by `(collection_id, card_variant_id, condition, language,
+is_graded, grade)` and sums quantity: the historical one-row-per-holding shape, for ad-hoc SQL.
+
+The application does not read that view — `services/portfolio.list_holdings(group_by=…)` groups in
+Python, because it needs the card/set joins and current prices in the same pass. The caller chooses
+what makes two copies the same holding from `HoldingGroupKey`: condition, language, graded, grade,
+location. **The card variant is always in the key** — merging a Holofoil with a Normal would make
+`market_price` meaningless, since price identity is `(tcgplayer_product_id, sub_type_name)` and not
+the card. Including `location` expands every slot into its own row; omitting it gives the library
+view. `test_service_portfolio.py` asserts the view and the service agree on the default keys, which
+is what keeps two implementations of one rule honest.
 
 ### `sealed_holding`
 id, collection_id, sealed_product_id, quantity, acquired_price, acquired_on, is_opened.

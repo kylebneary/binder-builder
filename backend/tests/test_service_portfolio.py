@@ -9,10 +9,12 @@ from app.services.collection import (
     upsert_collection_item,
 )
 from app.services.portfolio import (
+    HoldingGroupKey,
     get_portfolio_summary,
     get_portfolio_value_history,
     list_holdings,
 )
+from sqlalchemy import text
 
 
 def _seed_two_variants(db) -> tuple[CardVariant, CardVariant]:
@@ -233,3 +235,126 @@ def test_list_holdings_keeps_zero_quantity_rows(db):
 def test_list_holdings_of_an_empty_collection_is_empty(db):
     collection = get_or_create_default_collection(db)
     assert list_holdings(db, collection.id) == []
+
+
+# --- one row per physical card, rolled up on read ------------------------------------------------
+
+
+def test_same_card_in_two_slots_is_two_rows(db):
+    """The change that motivated all of this: a duplicate no longer overwrites its twin.
+
+    Under the old natural key these two upserts collided and the second *set* quantity to 1,
+    silently losing a card. See docs/07-data-backlog.md section 4.
+    """
+    normal, _ = _seed_two_variants(db)
+    collection = _own(db, normal, storage_location="Box 1 - A3")
+    _own(db, normal, storage_location="Box 1 - A4")
+
+    rows = list_holdings(db, collection.id, group_by=[HoldingGroupKey.LOCATION])
+    assert len(rows) == 2
+    assert sorted(r.storage_location for r in rows) == ["Box 1 - A3", "Box 1 - A4"]
+
+
+def test_default_grouping_rolls_slots_into_one_holding(db):
+    normal, _ = _seed_two_variants(db)
+    collection = _own(db, normal, storage_location="Box 1 - A3")
+    _own(db, normal, storage_location="Box 1 - A4")
+
+    rows = list_holdings(db, collection.id)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.quantity == 2
+    assert row.copies == 2
+    assert row.locations == ["Box 1 - A3", "Box 1 - A4"]
+    # Value follows the roll-up: two copies at 1.50.
+    assert row.market_value == Decimal("3.00")
+    # No single location is true of the group, so the column stays empty rather than picking one.
+    assert row.storage_location is None
+    assert row.item_ids == sorted(row.item_ids) and len(row.item_ids) == 2
+
+
+def test_a_group_in_one_place_keeps_its_location(db):
+    """Collapsing is only lossy when the copies actually disagree."""
+    normal, _ = _seed_two_variants(db)
+    collection = _own(db, normal, quantity=3, storage_location="Box 1 - A3")
+
+    row = list_holdings(db, collection.id)[0]
+    assert row.storage_location == "Box 1 - A3"
+    assert (row.quantity, row.copies) == (3, 1)
+
+
+def test_condition_can_be_dropped_from_the_key(db):
+    """The point of a caller-chosen key: 'how many of this card do I own, any condition?'"""
+    normal, _ = _seed_two_variants(db)
+    collection = _own(db, normal, condition="NM", storage_location="Box 1 - A3")
+    _own(db, normal, condition="LP", storage_location="Box 1 - A4")
+
+    assert len(list_holdings(db, collection.id)) == 2
+    merged = list_holdings(db, collection.id, group_by=[])
+    assert len(merged) == 1
+    assert merged[0].quantity == 2
+
+
+def test_variants_never_merge_however_few_keys_are_given(db):
+    """Price identity is (product, sub_type), so merging variants would make market_price a lie."""
+    normal, holo = _seed_two_variants(db)
+    collection = _own(db, normal, storage_location="Box 1 - A3")
+    _own(db, holo, storage_location="Box 1 - A4")
+
+    assert len(list_holdings(db, collection.id, group_by=[])) == 2
+
+
+def test_reimporting_the_same_slot_updates_it_rather_than_duplicating(db):
+    """What makes re-running an import safe: the slot is the identity."""
+    normal, holo = _seed_two_variants(db)
+    collection = _own(db, normal, storage_location="Box 1 - A3")
+    _own(db, normal, storage_location="Box 1 - A3")
+    assert len(list_holdings(db, collection.id, group_by=[HoldingGroupKey.LOCATION])) == 1
+
+    # And re-organising: a different card in that slot replaces what was there.
+    _own(db, holo, storage_location="Box 1 - A3")
+    rows = list_holdings(db, collection.id, group_by=[HoldingGroupKey.LOCATION])
+    assert len(rows) == 1
+    assert rows[0].card_variant_id == holo.id
+
+
+def test_rows_without_a_location_still_key_on_the_natural_key(db):
+    """A Collectr-shaped import knows quantity but no slot, and must not accumulate rows."""
+    normal, _ = _seed_two_variants(db)
+    collection = _own(db, normal, quantity=4)
+    _own(db, normal, quantity=6)
+
+    rows = list_holdings(db, collection.id)
+    assert len(rows) == 1
+    assert rows[0].quantity == 6
+
+
+def test_collection_holding_view_agrees_with_the_default_grouping(db):
+    """The view and the service are two implementations of one rule; keep them honest.
+
+    The view is what ad-hoc SQL and any Postgres consumer see, but list_holdings does its own
+    grouping (it needs the joins and prices anyway). If they ever disagree, one of them is lying
+    to somebody.
+    """
+    normal, holo = _seed_two_variants(db)
+    collection = _own(db, normal, storage_location="Box 1 - A3")
+    _own(db, normal, storage_location="Box 1 - A4")
+    _own(db, normal, condition="LP", storage_location="Box 2 - B1")
+    _own(db, holo, quantity=5)
+
+    view_rows = {
+        (r.card_variant_id, r.condition, r.language, bool(r.is_graded), r.grade): r.quantity
+        for r in db.execute(
+            text(
+                "SELECT card_variant_id, condition, language, is_graded, grade, quantity "
+                "FROM collection_holding WHERE collection_id = :cid"
+            ),
+            {"cid": collection.id},
+        )
+    }
+    service_rows = {
+        (h.card_variant_id, h.condition, h.language, h.is_graded, h.grade): h.quantity
+        for h in list_holdings(db, collection.id)
+    }
+    assert view_rows == service_rows
+    assert sum(view_rows.values()) == 8
