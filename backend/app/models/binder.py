@@ -1,5 +1,5 @@
 """Binder layouts. Placements are rectangles on a pocket grid; see docs/05-binder-spec.md."""
-from sqlalchemy import Boolean, ForeignKey, String
+from sqlalchemy import Boolean, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -34,6 +34,19 @@ class InsertAsset(Base, TimestampMixin):
 
 class BinderPlacement(Base, TimestampMixin):
     __tablename__ = "binder_placement"
+    # A cheap backstop for the real guard in services/binder.py: two placements can never claim
+    # the same top-left pocket. Overlap between differently-anchored spans still needs the
+    # service-layer interval check -- this index only catches exact-cell collisions.
+    __table_args__ = (
+        Index(
+            "uq_binder_placement_cell",
+            "binder_id",
+            "page_index",
+            "row",
+            "col",
+            unique=True,
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     binder_id: Mapped[int] = mapped_column(ForeignKey("binder.id", ondelete="CASCADE"))

@@ -5,6 +5,7 @@ from app.api.deps import get_db
 from app.api.schemas import (
     CollectionItemIn,
     CollectionItemOut,
+    HoldingOut,
     PortfolioSummaryOut,
     PortfolioValuePointOut,
 )
@@ -49,6 +50,19 @@ def delete_item(item_id: int, db: Session = Depends(get_db)) -> None:
     deleted = collection_service.delete_collection_item(db, collection.id, item_id)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Collection item {item_id} not found")
+
+
+@router.get("/holdings", response_model=list[HoldingOut])
+def list_holdings(db: Session = Depends(get_db)) -> list[HoldingOut]:
+    """Every owned card with its set, price and storage location -- the holdings table.
+
+    Returns the whole collection in one response so the client can sort and filter without a
+    round trip per keystroke; see services/portfolio.list_holdings for why that is the right
+    trade at this collection size.
+    """
+    collection = collection_service.get_or_create_default_collection(db)
+    holdings = portfolio_service.list_holdings(db, collection.id)
+    return [HoldingOut.model_validate(h) for h in holdings]
 
 
 @router.get("/portfolio", response_model=PortfolioSummaryOut)

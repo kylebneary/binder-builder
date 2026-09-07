@@ -20,11 +20,17 @@ Never commit to `main`. One branch per slice, merged when its exit criteria are 
 | `feat/phase-1-set-mapping` | Tasks 1.5–1.6 |
 | `feat/phase-1-tracker-ui` | Tasks 1.7–1.14 |
 | `feat/phase-2-optimizer` | Phase 2 |
-| `feat/phase-3-binder` | Phase 3 |
+| `feat/phase-3-binder-core` | Tasks 3.1–3.3, 3.5, 3.11–3.13 |
+| `feat/phase-3-binder-export` | Tasks 3.4, 3.9, 3.10 |
+| `feat/phase-3-binder-michi` | Tasks 3.6–3.8 |
 
 Phase 1 is three branches rather than one on purpose. Set mapping (1.5–1.6) is research-shaped
 and will churn through many revisions; keeping it separate lets the schema and ingest work in
 `feat/phase-1-data-ingest` merge to `main` early instead of waiting behind it.
+
+Phase 3 is split for the same reason: the Michi work (3.6–3.8) is colour science and curation
+judgement, not coding, and will churn. Splitting it out lets the editor in `feat/phase-3-binder-core`
+merge and become usable first. See `docs/08-phase-3-plan.md` for the full sequencing.
 
 ---
 
@@ -365,23 +371,69 @@ Phase 2 (2.1-2.15) is now fully complete, backend and frontend.
 
 ## Phase 3 — Binder designer
 
-**Branch:** `feat/phase-3-binder`
+**Branches:** `feat/phase-3-binder-core`, `-export`, `-michi` (see the branching table above).
+Sequencing and per-branch detail: `docs/08-phase-3-plan.md`.
 
 **Exit:** the owner has designed a real binder, printed inserts from the PDF, and they fit the
 pockets.
 
-- [ ] 3.1 Models + migration: `binder`, `binder_page`, `binder_placement`, `insert_asset`.
-- [ ] 3.2 Layout service with overlap and gutter invariants.
-- [ ] 3.3 API + UI: create a binder, drag-and-drop pocket grid, spread preview.
+- [x] 3.1 Models + migration: `binder`, `binder_placement`, `insert_asset`.
+- [x] 3.2 Layout service with overlap and gutter invariants.
+- [x] 3.3 API + UI: create a binder, drag-and-drop pocket grid, spread preview.
 - [ ] 3.4 Insert upload, DPI validation, multi-pocket span placement.
-- [ ] 3.5 Auto-layout: set order and rarity-tiered.
+- [x] 3.5 Auto-layout: set order and rarity-tiered.
 - [ ] 3.6 Dominant-colour extraction (CIELAB, cached on `card`).
 - [ ] 3.7 Template library (`data/binder_templates/`, ~8 hand-designed 3×3 spreads).
 - [ ] 3.8 Michi auto-layout with the scoring function from `docs/05-binder-spec.md`.
 - [ ] 3.9 Print export: insert PDF with bleed and crop marks, sheet packing.
 - [ ] 3.10 Spread preview PNG export.
-- [ ] 3.11 "Not owned" badges and count.
-- [ ] 3.12 Undo/redo.
+- [x] 3.11 "Not owned" badges and count.
+- [x] 3.12 Undo/redo.
+- [x] 3.13 Unique index on `binder_placement (binder_id, page_index, row, col)`.
+
+**Branch 1 (`feat/phase-3-binder-core`) is landed (2026-08-27).** 3.1-3.3, 3.5 and 3.11-3.13
+are done: a binder is creatable, editable by drag-and-drop, auto-fillable from a set, and undoable.
+
+- **3.2.** `validate_placements` in `backend/app/binder/layout.py` layers the reference invariants
+  (`kind=card` requires a `card_variant_id`, `kind=insert` an `insert_asset_id`) and the
+  gutter/side-loading rule on top of the existing `Rect.overlaps` / `validate_page` bounds check,
+  and resolves overlap **per spread** rather than per page. Read the module docstring before
+  touching it: gutter-spanning placements are stored on the even (left) page with `col` in
+  *spread* coordinates (0..2*cols-1), while everything else stores per-page `col`. That one
+  convention is the easiest thing in this phase to get wrong.
+- **3.5.** `auto_layout(cards, binder, *, mode=...)` is a single generator serving both non-Michi
+  modes, as planned - but it is named `auto_layout`, not `auto_layout_set_order`, since the name
+  would misdescribe `RARITY_TIERED`. `RARITY_ORDER` covers all 38 rarity strings the ingested
+  catalogue actually uses; regenerate it (`SELECT rarity, COUNT(*) FROM card GROUP BY rarity`)
+  after ingesting an unfamiliar era, and keep `OBSERVED_RARITIES` in `test_layout.py` in step.
+- **Auto-layout reports what it could not place.** `AutoLayoutResult.skipped_no_variant` counts
+  cards owning no `card_variant` row -- 4,808 catalogue-wide, since variants come from the price
+  feed and an unpriced card has nothing to place. It is disproportionately the chase cards, so
+  it is surfaced in the CLI, the API and the designer rather than swallowed.
+- **3.13.** Migration `a1f4c9d7e2b3` adds the unique index. It is only a backstop - it catches
+  exact-cell collisions, not overlap between differently-anchored spans, which stays the service
+  layer's job.
+- **Frontend.** Only `@dnd-kit/core` was added, not `@dnd-kit/sortable`: the pocket grid is a
+  free-form droppable grid and the collection pool is not reorderable, so `sortable` would have
+  been an unused dependency. `SpreadView` draws both facing pages as **one** CSS grid of
+  `2*cols + 1` columns, the middle column being the gutter sized at `gutter_mm / 70` of a pocket
+  width - which is what lets a gutter-spanning rectangle be a single element that genuinely
+  crosses the gutter, matching how the backend stores it.
+- **3.12.** Undo/redo is a stack of `{apply, invert}` batch pairs in `BinderDesignerPage`, replayed
+  through the ordinary `PUT /binders/{id}/placements` endpoint. Auto-layout clears the stack: it
+  rewrites the whole binder and has no small inverse batch.
+
+**Still open in this phase.**
+
+**3.7 has one of ~8 templates.** `data/binder_templates/hero_center_3x3.yaml` establishes the file
+format (named grid, typed slots, spans, `requires_side_loading`); nothing in Python parses it yet.
+
+Also already in place for branches 2 and 3: `reportlab` and `pillow` are declared dependencies but
+imported nowhere, so 3.9/3.10 need no new deps; `card.dominant_color_lab` already exists as a
+column for 3.6 to fill; and `settings.templates_dir` / `settings.image_cache_dir` are already
+configured (the latter still unused). The Phase 1/2 design system is what the binder UI composes -
+`aspect-pocket`, `Segmented`, `.hatch` and `CardTile`'s markup are all now in use by
+`BinderPocket` / `SpreadView`. Keep composing it; do not rebuild it.
 
 ## Phase 4 — Polish (only if 1–3 are being used)
 
@@ -401,9 +453,26 @@ backend and frontend (see the notes under Phase 2 above): goal creation and cost
 pull-rate profiles, the closed-form and vectorised simulation engines, strategy search/objectives/
 persistence, sensitivity analysis with price-basis perturbation and the tornado-chart UI, and
 shopping-list export with its "Export shopping list" button -- all verified against the real DB
-via the CLI, API, and a real browser. Full suite: 157 passing (1 slow deselected).
+via the CLI, API, and a real browser.
 
-Phase 3 (binder designer) is next per the roadmap order above.
+**Phase 3 (binder designer) is in progress.** Read `docs/08-phase-3-plan.md` first - it carries
+the branch split, the per-branch task breakdown, and the verification steps. Branch 1,
+`feat/phase-3-binder-core`, is landed: the layout-service invariants (3.2), `services/binder.py`,
+the binder API router, the `bb binder` CLI sub-app, the set-order/rarity-tiered auto-layout (3.5),
+and the drag-and-drop editor with not-owned badges and undo/redo (3.3, 3.11, 3.12). Full suite is
+237 passing (1 slow deselected), up from 157. Verified against the real 20,479-card database, which
+exposed two backend defects the synthetic fixtures could not (an incomplete `RARITY_ORDER` and
+auto-layout silently dropping unpriced cards). A real headless-Chrome pass over the designer then
+exposed two more in the frontend: dnd-kit's default `rectIntersection` dropped cards into the wrong
+pocket, and every empty pocket shared one draggable id. All four are fixed; the backend two are
+pinned by tests, and the frontend two need the E2E lane to stay pinned (see
+`docs/08-phase-3-plan.md`).
+
+**Next is `feat/phase-3-binder-export` (3.4, 3.9, 3.10)** - the branch that actually satisfies the
+phase exit criterion, since the exit is a printed sheet that fits a real pocket. Note that the
+insert-upload endpoint (3.4) is the first thing in the project to accept a file upload, and that
+`export_inserts_pdf` / `export_spread_png` in `backend/app/binder/export.py` are still stubs.
+Then `feat/phase-3-binder-michi` (3.6-3.8).
 
 No real `box_constraint` data exists yet for exercising `sim/montecarlo.py`'s guarantee code path
 against anything but a synthetic fixture -- worth researching one set for this, or accepting
@@ -428,3 +497,13 @@ Voltage are blocked on not having found adequate source data, not on schema.
    Design for NumPy from the first line rather than optimising later.
 3. **2.5, authoring pull-rate profiles.** This is research and judgement, not coding. Each set is
    an hour of reading community data and writing down what you believe and how confident you are.
+4. **3.9, the print export.** The only task in the project whose correctness is checked with a
+   ruler. Every other output can be wrong by a few percent and still be useful; an insert that is
+   2 mm off does not fit the pocket and the sheet of cardstock is wasted. Millimetres are the
+   stored unit and pixels are derived only at export time, per `docs/05-binder-spec.md`. Budget for
+   printing test sheets, and remember that printer "fit to page" scaling will silently invalidate
+   an otherwise correct PDF.
+5. **3.8, the Michi scoring function.** Like 2.5, this is judgement rather than coding — the code
+   is short and the weights are guesses until real spreads have been looked at. The one hard
+   technical constraint is that colour work happens in CIELAB with ΔE2000; RGB distance does not
+   match perception and produces visibly wrong colour-themed pages.

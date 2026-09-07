@@ -2,6 +2,8 @@ import { Suspense, lazy } from "react";
 import { Route, Routes } from "react-router-dom";
 import Nav from "./components/Nav";
 import { LoadingState } from "./components/ui";
+import BinderDesignerPage from "./pages/BinderDesignerPage";
+import BindersPage from "./pages/BindersPage";
 import BulkEntryPage from "./pages/BulkEntryPage";
 import GoalDetailPage from "./pages/GoalDetailPage";
 import GoalsPage from "./pages/GoalsPage";
@@ -36,6 +38,8 @@ export default function App() {
                     </Suspense>
                   }
                 />
+                <Route path="/binders" element={<BindersPage />} />
+                <Route path="/binders/:binderId" element={<BinderDesignerPage />} />
                 <Route path="/goals" element={<GoalsPage />} />
                 <Route path="/goals/:goalId" element={<GoalDetailPage />} />
                 <Route
@@ -51,7 +55,6 @@ export default function App() {
           }
         />
       </Routes>
-      {/* TODO(phase-3.3): binder designer canvas */}
     </div>
   );
 }

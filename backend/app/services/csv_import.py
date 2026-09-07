@@ -46,6 +46,12 @@ HEADER_ALIASES: dict[str, list[str]] = {
     "language": ["language", "lang"],
     "grade": ["grade"],
     "grader": ["grader", "grading company"],
+    # Physical storage coordinates. The owner's own export carries Box/Row/Position, and losing
+    # them on import is what made "where is this card?" unanswerable -- see storage_location in
+    # docs/02-data-model.md. Each part is optional; whichever are present get composed.
+    "box": ["box", "binder", "container"],
+    "row": ["row", "page", "shelf"],
+    "position": ["position", "slot", "pocket", "index"],
 }
 
 # Set names as they commonly appear in third-party collection spreadsheets/exports, mapped to
@@ -100,6 +106,26 @@ class ParsedRow:
     language: str
     grade: str | None
     grader: str | None
+    storage_location: str | None = None
+
+
+def _compose_location(box: str | None, row: str | None, position: str | None) -> str | None:
+    """Join whatever storage coordinates the file provides into one readable label.
+
+    "1", "A", "3" -> "Box 1 - A3"; a file with only a box gives "Box 1". Stored as text rather
+    than three columns because collections are organised in wildly different ways (boxes and
+    rows here, binders and pages elsewhere) and the schema commits to a single free-text
+    `storage_location`.
+    """
+    box = (box or "").strip()
+    row = (row or "").strip()
+    position = (position or "").strip()
+    if not any((box, row, position)):
+        return None
+    cell = f"{row}{position}" if row and position else row or position
+    if box and cell:
+        return f"Box {box} - {cell}"
+    return f"Box {box}" if box else cell
 
 
 def _parse_int(raw: str | None, default: int = 1) -> int:
@@ -169,6 +195,9 @@ def parse_csv(content: str) -> tuple[dict[str, str], list[ParsedRow]]:
                 language=(get(raw_row, "language") or "EN").strip().upper() or "EN",
                 grade=get(raw_row, "grade"),
                 grader=get(raw_row, "grader"),
+                storage_location=_compose_location(
+                    get(raw_row, "box"), get(raw_row, "row"), get(raw_row, "position")
+                ),
             )
         )
     return columns, rows
@@ -301,6 +330,7 @@ def apply_import(db: Session, rows: list[ParsedRow]) -> list[ImportRowResult]:
                 grader=row.grader,
                 acquired_price=row.price,
                 acquired_on=row.acquired_on,
+                storage_location=row.storage_location,
             ),
         )
     return results

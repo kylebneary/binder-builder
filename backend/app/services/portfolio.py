@@ -6,7 +6,7 @@ from decimal import Decimal
 from sqlalchemy import bindparam, select, text
 from sqlalchemy.orm import Session
 
-from app.models import CardVariant, CollectionItem
+from app.models import Card, CardVariant, CollectionItem, Set
 from app.services.prices import get_current_prices
 
 
@@ -140,3 +140,92 @@ def get_portfolio_value_history(db: Session, collection_id: int) -> list[Portfol
         PortfolioValuePoint(observed_on=d, total_market_value=value_by_date[d])
         for d in sorted(value_by_date)
     ]
+
+
+@dataclass(slots=True)
+class HoldingRow:
+    """One owned card, flattened for the holdings table.
+
+    Everything the table can sort, filter or search on is resolved here rather than in the UI, so
+    the CLI and the browser rank the same collection the same way. `market_price` is the unit
+    price; `market_value` is that times quantity, which is what the totals are built from.
+    """
+
+    item_id: int
+    card_variant_id: int
+    card_id: int
+    ptcg_card_id: str
+    name: str
+    number: str
+    number_sort: int
+    set_id: int
+    set_name: str
+    ptcg_set_id: str
+    rarity: str | None
+    variant: str
+    condition: str
+    language: str
+    quantity: int
+    is_graded: bool
+    grade: str | None
+    storage_location: str | None
+    acquired_price: Decimal | None
+    market_price: Decimal | None
+    market_value: Decimal | None
+    image_small: str | None
+
+
+def list_holdings(db: Session, collection_id: int) -> list[HoldingRow]:
+    """Every owned card joined to its card, set and current market price.
+
+    Returns the whole collection in one query rather than paging: this is a local-first tool with
+    a collection in the low thousands, and handing the client the full list lets it sort and
+    filter without a round trip per keystroke. Revisit if collections reach a size where the
+    payload hurts.
+    """
+    rows = db.execute(
+        select(CollectionItem, CardVariant, Card, Set)
+        .join(CardVariant, CollectionItem.card_variant_id == CardVariant.id)
+        .join(Card, CardVariant.card_id == Card.id)
+        .join(Set, Card.set_id == Set.id)
+        .where(CollectionItem.collection_id == collection_id)
+        .order_by(Set.release_date.desc(), Card.number_sort, Card.number)
+    ).all()
+
+    product_ids = sorted({v.tcgplayer_product_id for _, v, _, _ in rows if v.tcgplayer_product_id})
+    prices = get_current_prices(db, product_ids)
+
+    holdings: list[HoldingRow] = []
+    for item, variant, card, set_row in rows:
+        market: Decimal | None = None
+        if variant.tcgplayer_product_id is not None and variant.tcgplayer_sub_type_name is not None:
+            current = prices.get((variant.tcgplayer_product_id, variant.tcgplayer_sub_type_name))
+            if current:
+                market = current["market"]
+        holdings.append(
+            HoldingRow(
+                item_id=item.id,
+                card_variant_id=variant.id,
+                card_id=card.id,
+                ptcg_card_id=card.ptcg_card_id,
+                name=card.name,
+                number=card.number,
+                number_sort=card.number_sort,
+                set_id=set_row.id,
+                set_name=set_row.name,
+                ptcg_set_id=set_row.ptcg_set_id,
+                rarity=card.rarity,
+                variant=str(variant.variant),
+                condition=str(item.condition),
+                language=item.language,
+                quantity=item.quantity,
+                is_graded=item.is_graded,
+                grade=item.grade,
+                storage_location=item.storage_location,
+                acquired_price=item.acquired_price,
+                market_price=market,
+                market_value=(market * item.quantity) if market is not None else None,
+                image_small=card.image_small,
+            )
+        )
+    return holdings

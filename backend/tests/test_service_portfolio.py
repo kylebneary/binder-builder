@@ -8,7 +8,11 @@ from app.services.collection import (
     get_or_create_default_collection,
     upsert_collection_item,
 )
-from app.services.portfolio import get_portfolio_summary, get_portfolio_value_history
+from app.services.portfolio import (
+    get_portfolio_summary,
+    get_portfolio_value_history,
+    list_holdings,
+)
 
 
 def _seed_two_variants(db) -> tuple[CardVariant, CardVariant]:
@@ -170,3 +174,62 @@ def test_value_history_prices_current_holdings_at_each_past_date(db):
     assert history[0].total_market_value == Decimal("24.00")
     # 2026-08-25 (from _seed_two_variants): 4 * 1.50 + 1 * 28.00 = 34.00
     assert history[1].total_market_value == Decimal("34.00")
+
+
+def _own(db, variant, **kw):
+    collection = get_or_create_default_collection(db)
+    upsert_collection_item(
+        db,
+        collection.id,
+        CollectionItemData(card_variant_id=variant.id, **kw),
+    )
+    return collection
+
+
+def test_list_holdings_joins_card_set_and_price(db):
+    normal, _ = _seed_two_variants(db)
+    collection = _own(db, normal, quantity=2)
+
+    holdings = list_holdings(db, collection.id)
+    assert len(holdings) == 1
+    row = holdings[0]
+    assert (row.set_name, row.name, row.number) == ("Surging Sparks", "Alolan Diglett", "122")
+    assert row.market_price == Decimal("1.50")
+    # market_value is the unit price times quantity -- what the shown-total sums.
+    assert row.market_value == Decimal("3.00")
+
+
+def test_list_holdings_separates_variants_of_the_same_card(db):
+    """Two printings of one card are two holdings at two prices -- the price identity rule in
+    docs/02-data-model.md, which a card-level table would flatten and misprice."""
+    normal, reverse = _seed_two_variants(db)
+    collection = _own(db, normal, quantity=1)
+    _own(db, reverse, quantity=1)
+
+    rows = {h.variant: h for h in list_holdings(db, collection.id)}
+    assert set(rows) == {"normal", "reverse_holofoil"}
+    assert rows["normal"].market_price == Decimal("1.50")
+    assert rows["reverse_holofoil"].market_price == Decimal("28.00")
+
+
+def test_list_holdings_carries_storage_location(db):
+    normal, _ = _seed_two_variants(db)
+    collection = _own(db, normal, quantity=1, storage_location="Box 1 - A3")
+    assert list_holdings(db, collection.id)[0].storage_location == "Box 1 - A3"
+
+
+def test_list_holdings_keeps_zero_quantity_rows(db):
+    """A deliberate zero-of-this-variant row is a real record, so the read model keeps it and the
+    table's `owned only` filter is where that judgement belongs."""
+    normal, _ = _seed_two_variants(db)
+    collection = _own(db, normal, quantity=0)
+
+    rows = list_holdings(db, collection.id)
+    assert len(rows) == 1
+    assert rows[0].quantity == 0
+    assert rows[0].market_value == Decimal("0.00")
+
+
+def test_list_holdings_of_an_empty_collection_is_empty(db):
+    collection = get_or_create_default_collection(db)
+    assert list_holdings(db, collection.id) == []

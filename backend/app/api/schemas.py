@@ -254,3 +254,124 @@ class SensitivityOut(BaseModel):
     baseline_mean: float
     strategy_mean: float
     factors: list[SensitivityFactorOut]
+
+
+class BinderIn(BaseModel):
+    name: str
+    rows: int = 3
+    cols: int = 3
+    pages: int = 20
+    is_side_loading: bool = True
+    gutter_mm: int = 6
+    notes: str | None = None
+
+
+class BinderOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    rows: int
+    cols: int
+    pages: int
+    is_side_loading: bool
+    gutter_mm: int
+    notes: str | None
+
+
+class PlacementIn(BaseModel):
+    page_index: int
+    row: int
+    col: int
+    kind: str = "card"
+    row_span: int = 1
+    col_span: int = 1
+    card_variant_id: int | None = None
+    insert_asset_id: int | None = None
+    spans_gutter: bool = False
+    z_order: int = 0
+
+
+class PlacementCellIn(BaseModel):
+    page_index: int
+    row: int
+    col: int
+
+
+class PlacementBatchIn(BaseModel):
+    upserts: list[PlacementIn] = []
+    clears: list[PlacementCellIn] = []
+
+
+class PlacementOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    page_index: int
+    row: int
+    col: int
+    row_span: int
+    col_span: int
+    kind: str
+    card_variant_id: int | None
+    insert_asset_id: int | None
+    spans_gutter: bool
+    z_order: int
+    card_name: str | None = None
+    number: str | None = None
+    rarity: str | None = None
+    variant: str | None = None
+    image_small: str | None = None
+    image_large: str | None = None
+    is_owned: bool = False
+
+
+class BinderLayoutOut(BinderOut):
+    placements: list[PlacementOut]
+    not_owned_count: int
+
+
+class AutoLayoutIn(BaseModel):
+    set_id: int
+    mode: str = "set_order"
+    canonical_only: bool = True
+    skip_reverse_holos: bool = False
+    group_by_rarity: bool = False
+    start_subset_on_new_page: bool = False
+    replace: bool = True
+
+
+class AutoLayoutOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    placed: int
+    unplaced: int
+    pages_used: int
+    skipped_no_variant: int = 0
+
+
+class HoldingOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    item_id: int
+    card_variant_id: int
+    card_id: int
+    ptcg_card_id: str
+    name: str
+    number: str
+    number_sort: int
+    set_id: int
+    set_name: str
+    ptcg_set_id: str
+    rarity: str | None
+    variant: str
+    condition: str
+    language: str
+    quantity: int
+    is_graded: bool
+    grade: str | None
+    storage_location: str | None
+    acquired_price: Decimal | None
+    market_price: Decimal | None
+    market_value: Decimal | None
+    image_small: str | None

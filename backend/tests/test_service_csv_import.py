@@ -120,3 +120,29 @@ def test_import_unrecognized_printing_falls_back_to_canonical_and_says_so(db):
     results = dry_run_import(db, rows)
     assert results[0].status == "matched"
     assert "not recognized" in results[0].detail
+
+
+def test_box_row_position_becomes_a_storage_location():
+    """The owner's own export carries Box/Row/Position, and dropping them on import is what made
+    "where is this card?" unanswerable in the holdings table."""
+    content = (
+        "Box,Row,Position,Set,Card Num,Rarity,Condition\n"
+        "1,A,3,Base Set,44,B,MP\n"
+    )
+    _, rows = parse_csv(content)
+    assert rows[0].storage_location == "Box 1 - A3"
+
+
+def test_a_partial_location_still_records_what_it_has():
+    _, rows = parse_csv("Box,Set,Card Num\n7,Base Set,44\n")
+    assert rows[0].storage_location == "Box 7"
+
+
+def test_no_location_columns_leaves_it_unset():
+    _, rows = parse_csv("Set,Card Num,Quantity\nBase Set,44,2\n")
+    assert rows[0].storage_location is None
+
+
+def test_location_columns_are_detected_case_insensitively():
+    _, rows = parse_csv("BOX,ROW,POSITION,Set,Card Num\n2,C,9,Base Set,44\n")
+    assert rows[0].storage_location == "Box 2 - C9"

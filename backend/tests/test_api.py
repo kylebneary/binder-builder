@@ -2,6 +2,7 @@ from datetime import date
 
 import pytest
 from app.api.deps import get_db
+from app.db import enable_sqlite_foreign_keys
 from app.main import app
 from app.models import Base, Card, CardVariant, PricePoint, Set
 from app.models.enums import Variant
@@ -32,6 +33,7 @@ def client():
     engine = create_engine(
         "sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
+    enable_sqlite_foreign_keys(engine)
     Base.metadata.create_all(engine)
     with engine.begin() as conn:
         conn.execute(text(_CURRENT_PRICE_VIEW_SQL))

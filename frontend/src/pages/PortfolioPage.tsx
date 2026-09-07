@@ -7,8 +7,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { usePortfolio, usePortfolioHistory } from "../lib/queries";
+import { useHoldings, usePortfolio, usePortfolioHistory } from "../lib/queries";
 import { formatMoney, parseMoney } from "../lib/types";
+import HoldingsTable from "../components/HoldingsTable";
 import { tooltipStyles, useChartColors } from "../lib/chartTheme";
 import {
   ErrorState,
@@ -23,6 +24,7 @@ import {
 export default function PortfolioPage() {
   const { data: summary, isLoading: summaryLoading } = usePortfolio();
   const { data: history, isLoading: historyLoading } = usePortfolioHistory();
+  const { data: holdings, isLoading: holdingsLoading } = useHoldings();
 
   if (summaryLoading || historyLoading) return <LoadingState />;
   if (!summary) return <ErrorState message="No portfolio data yet." />;
@@ -63,6 +65,17 @@ export default function PortfolioPage() {
           </p>
         ) : (
           <ValueChart data={chartData} />
+        )}
+      </Panel>
+
+      <Panel className="mt-6 p-4">
+        <SectionLabel className="mb-4">Holdings</SectionLabel>
+        {holdingsLoading ? (
+          <p className="py-10 text-center font-mono text-[12px] uppercase tracking-[0.08em] text-ink-3">
+            Loading holdings
+          </p>
+        ) : (
+          <HoldingsTable holdings={holdings ?? []} />
         )}
       </Panel>
     </Page>

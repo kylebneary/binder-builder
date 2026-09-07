@@ -1,11 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
 import type {
+  AutoLayoutIn,
+  AutoLayoutOut,
+  BinderIn,
+  BinderLayoutOut,
+  BinderOut,
   CollectionItemIn,
   CollectionItemOut,
   GoalDetailOut,
   GoalIn,
   GoalOut,
+  HoldingOut,
+  PlacementBatchIn,
+  PlacementOut,
   PortfolioSummaryOut,
   PortfolioValuePointOut,
   SealedProductOut,
@@ -128,5 +136,82 @@ export function useRunSensitivity(goalId: number | undefined) {
         method: "POST",
         body: JSON.stringify(body),
       }),
+  });
+}
+
+/* ------------------------------------------------------------------- binder */
+
+export function useBinders() {
+  return useQuery({
+    queryKey: ["binders"],
+    queryFn: () => api<BinderOut[]>("/binders"),
+  });
+}
+
+export function useBinderLayout(binderId: number | undefined) {
+  return useQuery({
+    queryKey: ["binders", binderId, "layout"],
+    queryFn: () => api<BinderLayoutOut>(`/binders/${binderId}/layout`),
+    enabled: binderId !== undefined && !Number.isNaN(binderId),
+  });
+}
+
+export function useCreateBinder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: BinderIn) =>
+      api<BinderOut>("/binders", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["binders"] });
+    },
+  });
+}
+
+export function useDeleteBinder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (binderId: number) => api<void>(`/binders/${binderId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["binders"] });
+    },
+  });
+}
+
+/** One gesture, one request. The undo stack in BinderDesignerPage holds inverse batches and
+ * replays them through this same mutation, so undo needs no special server support. */
+export function useSetPlacements(binderId: number | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: PlacementBatchIn) =>
+      api<PlacementOut[]>(`/binders/${binderId}/placements`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["binders", binderId, "layout"] });
+    },
+  });
+}
+
+export function useAutoLayout(binderId: number | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: AutoLayoutIn) =>
+      api<AutoLayoutOut>(`/binders/${binderId}/auto-layout`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["binders", binderId, "layout"] });
+    },
+  });
+}
+
+/** The whole collection in one request. Sorting and filtering happen client-side -- see
+ * services/portfolio.list_holdings for why the payload is returned whole. */
+export function useHoldings() {
+  return useQuery({
+    queryKey: ["collection", "holdings"],
+    queryFn: () => api<HoldingOut[]>("/collection/holdings"),
   });
 }

@@ -162,7 +162,39 @@ Halloween promo bundle product, not something to build a pull-rate profile for.
       classifiable by name pattern. `bb sync sealedmap` prints the review queue. Tracked here as
       a reminder it's large, not because anything changed since the Phase 1 real-data run.
 
-## 4. Deferred to a later phase (not backlog yet — don't start without asking)
+## 4. Collection import fidelity (`data/pokemon_cards.csv`)
+
+Found 2026-09-05 while building the Portfolio holdings table, which surfaced these by putting
+per-card quantity and location on screen for the first time.
+
+- [x] **Box/Row/Position were being dropped on import.** The owner's CSV carries physical storage
+      coordinates for every row, but `HEADER_ALIASES` in `app/services/csv_import.py` had no entry
+      for them and `apply_import` never set `storage_location`, so "where is this card?" was
+      unanswerable. Fixed: the three columns are now detected and composed into
+      `storage_location` (`Box 1 - A3`). **The existing rows predate the fix and are still
+      unlocated** — a re-import backfills them.
+
+- [ ] **The collection is undercounted roughly 2:1, and this affects portfolio value.** The CSV
+      holds one row per physical card, and 849 `(set, number, condition)` keys appear more than
+      once — 15 rows of Pokémon GO #32, for instance. `upsert_collection_item` *sets* quantity
+      rather than summing, so every duplicate collapses to a single row of quantity 1: **1,761
+      cards silently dropped.** The database reports 1,486 cards / $642.57 against ~3,428 matched
+      CSV rows. The fix is to aggregate rows sharing a natural key when the file has no quantity
+      column, while continuing to trust an explicit quantity column where one exists (Collectr
+      and Deckbox exports have one; this file does not). Not done because it materially restates
+      the owner's portfolio value and that should be a deliberate call.
+
+- [ ] **A re-import would also add ~320 holdings**, not just backfill locations: those rows failed
+      the original import with `no_variant` because their sets had no prices ingested at the time.
+      Measured on a copy: 1,505 -> 1,825 rows, 0 -> 1,803 locations.
+
+- [ ] **No cost basis exists.** `acquired_price` is null on all 1,505 rows because the CSV has no
+      price column, so the Portfolio page's "Cost basis $0.00" and "Unrealized gain" (which just
+      restates market value) are not meaningful. Either source acquisition prices or drop those
+      two tiles. Note the data-package README claims the collection ships "with acquired prices";
+      it does not.
+
+## 5. Deferred to a later phase (not backlog yet — don't start without asking)
 
 - Japanese set pull-rate/pack data (different source: TCGdex, not pokemontcg.io/tcgcsv) —
   Phase 4.4.

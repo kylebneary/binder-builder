@@ -1,4 +1,5 @@
 import pytest
+from app.db import enable_sqlite_foreign_keys
 from app.models import Base
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
@@ -28,6 +29,9 @@ def db() -> Session:
     docs/02-data-model.md ("do not use create_all outside tests").
     """
     engine = create_engine("sqlite:///:memory:")
+    # Match the app engine: without this, SQLite ignores every ondelete="CASCADE" and tests
+    # would pass against behaviour production does not have. See app/db.py.
+    enable_sqlite_foreign_keys(engine)
     Base.metadata.create_all(engine)
     with engine.begin() as conn:
         conn.execute(text(_CURRENT_PRICE_VIEW_SQL))

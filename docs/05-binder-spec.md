@@ -38,7 +38,10 @@ kind ∈ {card, insert, empty}
 
 A **spread** is a facing pair `(page 2n, page 2n+1)`. For gutter-spanning placements, treat the
 spread as a single grid of `rows × (2·cols)` and allow `col` to range across it, flagging
-`spans_gutter = true`. The renderer draws a gutter allowance (default 6 mm) between the halves so
+`spans_gutter = true`. Such a placement is stored on the **even (left) page** of the spread, and
+its `col` is then in spread coordinates rather than page coordinates; every other placement keeps a
+per-page `col` of 0..cols-1. Overlap is therefore checked per spread, not per page, after mapping
+both forms into spread coordinates -- see `to_spread_rect` in `backend/app/binder/layout.py`. The renderer draws a gutter allowance (default 6 mm) between the halves so
 the print export accounts for the physical gap.
 
 **Invariants** the service layer must enforce:

@@ -15,7 +15,7 @@ A local-first Pokémon TCG collection tool with three pillars:
 
 ## Stack (decided — do not re-litigate without asking)
 
-- **Backend:** Python 3.11+ (dev machine has 3.11.5 via Anaconda, no 3.12 installed), FastAPI,
+- **Backend:** Python 3.11+ (dev machine runs 3.13.15 from python.org; `.venv` is built on it), FastAPI,
   SQLAlchemy 2.0 (typed ORM), Alembic, Pydantic v2.
 - **Database:** SQLite by default (local-first, single file). All SQL must stay Postgres-compatible;
   no SQLite-only syntax. `DATABASE_URL` switches engines.
