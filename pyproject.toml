@@ -18,6 +18,9 @@ dependencies = [
     "rich>=13.9",
     "reportlab>=4.2",
     "pillow>=11.0",
+    # FastAPI needs this to parse multipart bodies; the insert upload (3.4) is the only
+    # endpoint in the project that takes a file.
+    "python-multipart>=0.0.20",
 ]
 
 [project.optional-dependencies]
