@@ -394,13 +394,13 @@ pockets.
 - [x] 3.1 Models + migration: `binder`, `binder_placement`, `insert_asset`.
 - [x] 3.2 Layout service with overlap and gutter invariants.
 - [x] 3.3 API + UI: create a binder, drag-and-drop pocket grid, spread preview.
-- [ ] 3.4 Insert upload, DPI validation, multi-pocket span placement.
+- [x] 3.4 Insert upload, DPI validation, multi-pocket span placement.
 - [x] 3.5 Auto-layout: set order and rarity-tiered.
 - [ ] 3.6 Dominant-colour extraction (CIELAB, cached on `card`).
 - [ ] 3.7 Template library (`data/binder_templates/`, ~8 hand-designed 3×3 spreads).
 - [ ] 3.8 Michi auto-layout with the scoring function from `docs/05-binder-spec.md`.
-- [ ] 3.9 Print export: insert PDF with bleed and crop marks, sheet packing.
-- [ ] 3.10 Spread preview PNG export.
+- [x] 3.9 Print export: insert PDF with bleed and crop marks, sheet packing.
+- [x] 3.10 Spread preview PNG export.
 - [x] 3.11 "Not owned" badges and count.
 - [x] 3.12 Undo/redo.
 - [x] 3.13 Unique index on `binder_placement (binder_id, page_index, row, col)`.
@@ -436,6 +436,29 @@ are done: a binder is creatable, editable by drag-and-drop, auto-fillable from a
 - **3.12.** Undo/redo is a stack of `{apply, invert}` batch pairs in `BinderDesignerPage`, replayed
   through the ordinary `PUT /binders/{id}/placements` endpoint. Auto-layout clears the stack: it
   rewrites the whole binder and has no small inverse batch.
+
+**Branch 2 (`feat/phase-3-binder-export`) is landed (2026-09-07).** 3.4, 3.9 and 3.10 are done:
+inserts upload with a DPI gate, print-ready sheets, and spread previews.
+
+- **3.4.** `services/inserts.py` refuses anything under 300 DPI at its target size and says what
+  pixel dimensions would work. Files are content-addressed under `settings.image_cache_dir /
+  "inserts"` (that setting was configured but unused before). Deleting an insert that is still
+  placed is refused rather than orphaning placements. `python-multipart` is a new dependency --
+  FastAPI needs it for `UploadFile`, and this is the project's first upload endpoint.
+- **3.9.** `binder/export.py` is pure geometry and rendering, like `layout.py`; the DB-facing half
+  is `services/binder_export.py`. Two deviations from the plan worth knowing:
+  - **Art is drawn larger than the trim.** "Exact dimensions" and "2 mm bleed" are in tension, so
+    the *trim* is exact and the art covers trim + 2 mm, scaled uniformly and centre-cropped
+    (`cover_size`). Filling the bleed box directly would squash art by ~2%.
+  - **Pieces rotate when they do not fit.** A 3-pocket-wide insert is 210 mm -- wider than the
+    printable width of Letter (196 mm) *and* A4 (190 mm) -- so the spec's full-page-art archetype
+    was unprintable upright. It fits lying down, and the caption says `[rotated]`.
+- **3.10.** `render_spread_png` defaults to 150 DPI, not 300: the spec's 300 floor is about the
+  print deliverable, and a 3x3 spread at 300 DPI is a 5000px file. Card art is cached by URL hash
+  and a fetch failure degrades to a grey box rather than sinking the whole preview.
+- **The exit criterion is still open.** Nothing here substitutes for printing a sheet at 100% scale
+  and checking a cut piece against a real pocket. See the verification section of
+  `docs/08-phase-3-plan.md`.
 
 **Still open in this phase.**
 
