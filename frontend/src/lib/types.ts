@@ -345,6 +345,57 @@ export type HoldingGroupKey = "condition" | "language" | "graded" | "grade" | "l
 /** What the backend groups by when the request says nothing. Mirrors DEFAULT_GROUP_KEYS. */
 export const DEFAULT_GROUP_KEYS: HoldingGroupKey[] = ["condition", "language", "graded", "grade"];
 
+/** What makes cards belong together in a Michi layout. Mirrors ClusterKey. */
+export type ClusterKey = "species" | "artist" | "colour" | "evolution";
+
+/** Score weights from docs/05-binder-spec.md. Mirrors MichiWeightsIn. */
+export interface MichiWeights {
+  symmetry: number;
+  colour: number;
+  hero: number;
+  fill: number;
+  orphan: number;
+}
+
+export const DEFAULT_MICHI_WEIGHTS: MichiWeights = {
+  symmetry: 0.3,
+  colour: 0.25,
+  hero: 0.2,
+  fill: 0.15,
+  orphan: 0.1,
+};
+
+export interface MichiLayoutIn {
+  set_id: number;
+  cluster_key: ClusterKey;
+  trials?: number;
+  seed?: number;
+  canonical_only?: boolean;
+  weights: MichiWeights;
+}
+
+/** A term is null when it could not be measured at all -- colour needs extracted card colours,
+ * hero needs a template with a hero slot. Shown as "not measured", never as zero. */
+export interface MichiScoreOut {
+  total: number;
+  symmetry: number | null;
+  colour: number | null;
+  hero: number | null;
+  fill: number | null;
+  orphan: number;
+  measured: string[];
+  unmeasured: string[];
+}
+
+export interface MichiLayoutOut {
+  placed: number;
+  unplaced: number;
+  groups: number;
+  trials: number;
+  score: MichiScoreOut;
+}
+
+
 /** One holding -- a group of physical cards, not necessarily one card. Mirrors HoldingOut. */
 export interface HoldingOut {
   item_id: number;

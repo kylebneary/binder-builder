@@ -3,7 +3,7 @@ reusable from the CLI (see docs/01-architecture.md)."""
 from datetime import date
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class VariantOut(BaseModel):
@@ -331,6 +331,21 @@ class BinderLayoutOut(BinderOut):
     not_owned_count: int
 
 
+class InsertAssetOut(BaseModel):
+    """A stored insert. `dpi` is the measured effective DPI at the declared pocket span, not
+    metadata read out of the file -- see services/inserts.py."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    image_path: str
+    width_pockets: int
+    height_pockets: int
+    dpi: int | None
+    source_note: str | None
+
+
 class AutoLayoutIn(BaseModel):
     set_id: int
     mode: str = "set_order"
@@ -339,6 +354,48 @@ class AutoLayoutIn(BaseModel):
     group_by_rarity: bool = False
     start_subset_on_new_page: bool = False
     replace: bool = True
+
+
+class MichiWeightsIn(BaseModel):
+    """The score weights from docs/05-binder-spec.md. User-adjustable because they encode taste."""
+
+    symmetry: float = Field(default=0.30, ge=0.0, le=1.0)
+    colour: float = Field(default=0.25, ge=0.0, le=1.0)
+    hero: float = Field(default=0.20, ge=0.0, le=1.0)
+    fill: float = Field(default=0.15, ge=0.0, le=1.0)
+    orphan: float = Field(default=0.10, ge=0.0, le=1.0)
+
+
+class MichiLayoutIn(BaseModel):
+    set_id: int
+    cluster_key: str = "species"
+    trials: int = Field(default=24, ge=1, le=200)
+    seed: int = 0
+    canonical_only: bool = True
+    weights: MichiWeightsIn = Field(default_factory=MichiWeightsIn)
+
+
+class MichiScoreOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    total: float
+    symmetry: float | None
+    colour: float | None
+    hero: float | None
+    fill: float | None
+    orphan: float
+    # Which terms could be measured at all. Colour needs `bb binder extract-colors` to have run;
+    # hero needs a template with a hero slot. The UI says so rather than showing a silent zero.
+    measured: list[str]
+    unmeasured: list[str]
+
+
+class MichiLayoutOut(BaseModel):
+    placed: int
+    unplaced: int
+    groups: int
+    trials: int
+    score: MichiScoreOut
 
 
 class AutoLayoutOut(BaseModel):

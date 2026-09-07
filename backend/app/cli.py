@@ -8,7 +8,9 @@ import typer
 from rich.console import Console
 from sqlalchemy import select
 
+from app.binder.export import ExportError
 from app.binder.layout import AutoLayoutMode
+from app.binder.michi import ClusterKey, ScoreWeights
 from app.config import get_settings
 from app.db import SessionLocal
 from app.ingest.cards import ingest_sets_and_cards
@@ -29,9 +31,15 @@ from app.models.enums import GoalType
 from app.services import binder as binder_service
 from app.services import goals as goals_service
 from app.services.binder import BinderData, LayoutError
+from app.services.binder_export import (
+    export_binder_inserts_pdf,
+    export_binder_spread_png,
+)
 from app.services.collection import get_or_create_default_collection
 from app.services.csv_export import export_collection_csv
 from app.services.csv_import import apply_import, dry_run_import, parse_csv
+from app.services.inserts import InsertError, list_inserts, save_insert
+from app.services.michi import apply_michi_layout, extract_colors
 from app.services.simulation_runs import run_search_and_cache
 from app.sim.optimizer import Objective
 from app.sim.types import CostParams
@@ -701,6 +709,211 @@ def binder_import_json(
     finally:
         db.close()
     console.print(f"Imported into binder {binder.id}: {binder.name!r}")
+
+
+@binder_app.command("add-insert")
+def binder_add_insert(
+    path: str,
+    name: str = typer.Option("", "--name", help="Defaults to the file's stem."),
+    width: int = typer.Option(1, "--width", help="Pockets wide."),
+    height: int = typer.Option(1, "--height", help="Pockets tall."),
+    source_note: str | None = typer.Option(None, "--source", help="Where the art came from."),
+) -> None:
+    """Store an insert image, refusing anything under 300 DPI at its target size."""
+    file_path = Path(path)
+    if not file_path.exists():
+        console.print(f"[red]No such file: {path}[/red]")
+        raise typer.Exit(code=1)
+    db = SessionLocal()
+    try:
+        asset = save_insert(
+            db,
+            name=name,
+            data=file_path.read_bytes(),
+            filename=file_path.name,
+            width_pockets=width,
+            height_pockets=height,
+            source_note=source_note,
+        )
+    except InsertError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from None
+    finally:
+        db.close()
+    console.print(
+        f"Insert {asset.id}: {asset.name!r} -- {asset.width_pockets}x{asset.height_pockets} "
+        f"pockets at {asset.dpi} DPI"
+    )
+
+
+@binder_app.command("list-inserts")
+def binder_list_inserts() -> None:
+    """List stored insert assets."""
+    db = SessionLocal()
+    try:
+        assets = list_inserts(db)
+    finally:
+        db.close()
+    if not assets:
+        console.print("No inserts yet -- add one with `bb binder add-insert <path>`.")
+        return
+    for a in assets:
+        console.print(
+            f"{a.id:4d}  {a.name[:32]:32s}  {a.width_pockets}x{a.height_pockets}  {a.dpi} DPI"
+        )
+
+
+@binder_app.command("export-pdf")
+def binder_export_pdf(
+    binder_id: int,
+    path: str = typer.Option("inserts.pdf", "--path", help="Where to write the PDF."),
+    page_size: str = typer.Option("letter", "--page-size", help="letter | a4"),
+) -> None:
+    """Write the print-ready insert sheets.
+
+    Print at 100% scale with "fit to page" off, or the whole point of the exact millimetre
+    geometry is lost.
+    """
+    db = SessionLocal()
+    try:
+        out = export_binder_inserts_pdf(db, binder_id, path, page_size=page_size)
+    except ExportError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from None
+    finally:
+        db.close()
+    console.print(f"Wrote {out}")
+    console.print("[yellow]Print at 100% scale -- do not use 'fit to page'.[/yellow]")
+
+
+@binder_app.command("export-png")
+def binder_export_png(
+    binder_id: int,
+    spread: int = typer.Option(0, "--spread", help="Spread index; 0 is pages 1-2."),
+    path: str | None = typer.Option(None, "--path", help="Defaults to spread-<n>.png."),
+    dpi: int = typer.Option(150, "--dpi", help="Preview resolution."),
+) -> None:
+    """Render a spread preview at true proportions."""
+    out_path = path or f"spread-{spread}.png"
+    db = SessionLocal()
+    try:
+        out = export_binder_spread_png(db, binder_id, spread, out_path, dpi=dpi)
+    except ExportError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from None
+    finally:
+        db.close()
+    console.print(f"Wrote {out}")
+
+
+@binder_app.command("extract-colors")
+def binder_extract_colors(
+    set_code: str | None = typer.Option(None, "--set", help="ptcg_set_id, e.g. sv8. Omit for all."),
+    limit: int | None = typer.Option(None, "--limit", help="Stop after this many cards."),
+    refresh: bool = typer.Option(False, "--refresh", help="Recompute cards that already have one."),
+) -> None:
+    """Cache each card's dominant colour as CIELAB, for colour-themed Michi layouts.
+
+    Downloads art once into the image cache, so a second run over the same set does no network
+    work. Cards whose art will not download or decode are counted and skipped, never guessed.
+    """
+    db = SessionLocal()
+    try:
+        set_id = None
+        if set_code:
+            row = db.execute(
+                select(SetModel).where(SetModel.ptcg_set_id == set_code)
+            ).scalar_one_or_none()
+            if row is None:
+                console.print(f"[red]No set with ptcg_set_id {set_code!r}.[/red]")
+                raise typer.Exit(code=1)
+            set_id = row.id
+        result = extract_colors(db, set_id=set_id, limit=limit, refresh=refresh)
+    finally:
+        db.close()
+    console.print(
+        f"{result.extracted} extracted, {result.already_cached} already cached, "
+        f"{result.skipped_no_image} without usable art, {result.skipped_unreadable} unreadable "
+        f"(of {result.considered} considered)"
+    )
+    if result.skipped_no_image:
+        console.print(
+            "[yellow]Cards without usable art keep a null colour and are grouped as 'misc' by "
+            "colour clustering.[/yellow]"
+        )
+
+
+@binder_app.command("michi")
+def binder_michi(
+    binder_id: int,
+    set_code: str = typer.Option(..., "--set", help="ptcg_set_id, e.g. sv8."),
+    key: str = typer.Option("species", "--key", help="species | artist | colour | evolution"),
+    trials: int = typer.Option(24, "--trials", help="Best-of-N template/assignment trials."),
+    seed: int = typer.Option(0, "--seed", help="Seeded, so a run is reproducible."),
+    w_sym: float = typer.Option(0.30, "--w-symmetry"),
+    w_col: float = typer.Option(0.25, "--w-colour"),
+    w_hero: float = typer.Option(0.20, "--w-hero"),
+    w_fill: float = typer.Option(0.15, "--w-fill"),
+    w_orph: float = typer.Option(0.10, "--w-orphan"),
+) -> None:
+    """Lay a set out Michi-style: cluster, template, assign, score, best of N.
+
+    Replaces the binder's whole layout. Run `bb binder extract-colors --set <id>` first if you
+    want the colour terms to count for anything.
+    """
+    try:
+        cluster_key = ClusterKey(key)
+    except ValueError:
+        valid = ", ".join(k.value for k in ClusterKey)
+        console.print(f"[red]Unknown --key {key!r}. Use one of: {valid}.[/red]")
+        raise typer.Exit(code=1) from None
+
+    db = SessionLocal()
+    try:
+        set_row = db.execute(
+            select(SetModel).where(SetModel.ptcg_set_id == set_code)
+        ).scalar_one_or_none()
+        if set_row is None:
+            console.print(f"[red]No set with ptcg_set_id {set_code!r}.[/red]")
+            raise typer.Exit(code=1)
+        result = apply_michi_layout(
+            db,
+            binder_id,
+            set_row.id,
+            cluster_key=cluster_key,
+            weights=ScoreWeights(w_sym, w_col, w_hero, w_fill, w_orph),
+            trials=trials,
+            seed=seed,
+        )
+    except LookupError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from None
+    except LayoutError as exc:
+        for error in exc.errors:
+            console.print(f"[red]{error}[/red]")
+        raise typer.Exit(code=1) from None
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from None
+    finally:
+        db.close()
+
+    score = result.score
+    console.print(
+        f"{result.placed} placed across {result.groups} spreads "
+        f"({result.unplaced} left over), best of {result.trials} trials"
+    )
+    console.print(f"score {score.total:.3f}")
+    for name in ("symmetry", "colour", "hero", "fill"):
+        value = getattr(score, name)
+        shown = f"{value:.3f}" if value is not None else "not measured"
+        console.print(f"  {name:9s} {shown}")
+    console.print(f"  {'orphan':9s} {score.orphan:.3f} (penalty)")
+    if "colour" in score.unmeasured:
+        console.print(
+            "[yellow]Colour coherence did not count: no card in this set has a dominant colour "
+            "yet. Run `bb binder extract-colors --set " + set_code + "` first.[/yellow]"
+        )
 
 
 if __name__ == "__main__":

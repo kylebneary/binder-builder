@@ -14,6 +14,8 @@ import {
 } from "@dnd-kit/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
+import type { ClusterKey, MichiWeights } from "../lib/types";
+import { DEFAULT_MICHI_WEIGHTS } from "../lib/types";
 import { PlacedCard, parsePocketId } from "../components/BinderPocket";
 import BinderContents from "../components/BinderContents";
 import SpreadView from "../components/SpreadView";
@@ -34,6 +36,7 @@ import {
 } from "../components/ui";
 import {
   useAutoLayout,
+  useMichiLayout,
   useBinderLayout,
   useSetPlacements,
   useSetDetail,
@@ -126,6 +129,48 @@ const collisionDetection: CollisionDetection = (args) => {
   return underPointer.length > 0 ? underPointer : closestCenter(args);
 };
 
+/** The adjustable score terms, in the order docs/05-binder-spec.md lists them. */
+const WEIGHT_FIELDS: { key: keyof MichiWeights; label: string; hint: string }[] = [
+  { key: "symmetry", label: "symmetry", hint: "Placements mirrored about the spread's centre" },
+  { key: "colour", label: "colour", hint: "Adjacent cards close in CIELAB (needs extracted colours)" },
+  { key: "hero", label: "hero", hint: "How central the spread's standout card sits" },
+  { key: "fill", label: "fill", hint: "Empty pockets spread evenly rather than piled on one page" },
+  { key: "orphan", label: "orphan", hint: "Penalty when a group is split across non-adjacent spreads" },
+];
+
+/** Fetch a binary export and hand it to the browser as a download.
+ *
+ * Same blob-and-anchor dance as the goal shopping-list export in GoalDetailPage -- deliberately
+ * not a second download mechanism. The difference is that these come back binary, so the response
+ * is read as a blob rather than text, and a failed request carries a JSON `detail` worth showing
+ * (an export refuses on things the user can fix: no inserts placed, art too big for the sheet).
+ */
+async function downloadExport(url: string, filename: string): Promise<void> {
+  const res = await fetch(url);
+  if (!res.ok) {
+    let detail = `${res.status}`;
+    try {
+      detail = (await res.json()).detail ?? detail;
+    } catch {
+      /* not JSON; the status is all we have */
+    }
+    throw new Error(detail);
+  }
+  const blobUrl = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = blobUrl;
+  a.download = filename;
+  // Attached before clicking, and the URL revoked on a timer rather than synchronously. This is
+  // defensive rather than a fix for anything observed here: a detached anchor is ignored by some
+  // browsers, and revoking immediately can in principle pull the blob out from under a download
+  // that has not finished reading it. GoalDetailPage's text export does neither and works fine,
+  // so if these two ever get factored together, that is the direction to move it.
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 10_000);
+}
+
 export default function BinderDesignerPage() {
   const { binderId: binderIdParam } = useParams();
   const binderId = Number(binderIdParam);
@@ -133,9 +178,15 @@ export default function BinderDesignerPage() {
   const { data: layout, isLoading, error } = useBinderLayout(binderId);
   const setPlacements = useSetPlacements(binderId);
   const autoLayout = useAutoLayout(binderId);
+  const michiLayout = useMichiLayout(binderId);
   const { data: sets } = useSets();
 
   const [spreadIndex, setSpreadIndex] = useState(0);
+  const [pageSize, setPageSize] = useState<"letter" | "a4">("letter");
+  const [clusterKey, setClusterKey] = useState<ClusterKey>("species");
+  const [weights, setWeights] = useState<MichiWeights>(DEFAULT_MICHI_WEIGHTS);
+  const [exporting, setExporting] = useState<"pdf" | "png" | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [poolSetId, setPoolSetId] = useState<string>("");
   const [ownedOnly, setOwnedOnly] = useState(false);
   const [dragging, setDragging] = useState<
@@ -143,7 +194,7 @@ export default function BinderDesignerPage() {
   >(null);
   const [undoStack, setUndoStack] = useState<Edit[]>([]);
   const [redoStack, setRedoStack] = useState<Edit[]>([]);
-  const [mode, setMode] = useState<"set_order" | "rarity_tiered">("set_order");
+  const [mode, setMode] = useState<"set_order" | "rarity_tiered" | "michi">("set_order");
 
   const { data: poolSet } = useSetDetail(poolSetId || undefined);
 
@@ -274,10 +325,26 @@ export default function BinderDesignerPage() {
     run({ apply: { clears: [cell] }, invert: { upserts: [asUpsert(placement)] } });
   }
 
+  function handleMichiLayout() {
+    if (!poolSet) return;
+    michiLayout.mutate(
+      { set_id: poolSet.id, cluster_key: clusterKey, weights },
+      {
+        // Same as the other modes: a whole-binder rewrite has no small inverse batch.
+        onSuccess: () => {
+          setUndoStack([]);
+          setRedoStack([]);
+        },
+      },
+    );
+  }
+
   function handleAutoLayout() {
     if (!poolSet) return;
     autoLayout.mutate(
-      { set_id: poolSet.id, mode },
+      // Narrowed: handleAutoLayout is only reachable when the mode is not michi, which has
+      // its own endpoint.
+      { set_id: poolSet.id, mode: mode as "set_order" | "rarity_tiered" },
       {
         // Auto-layout rewrites the whole binder; there is no small inverse batch that would
         // undo it, so the history is dropped rather than left holding stale cells.
@@ -294,6 +361,33 @@ export default function BinderDesignerPage() {
   if (!layout) return <ErrorState message="Binder not found" />;
 
   const spreadCount = Math.ceil(layout.pages / 2);
+  const slug = layout.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "binder";
+  // Captured out of the closure: TypeScript will not carry the `if (!layout) return` narrowing
+  // into a function declaration.
+  const exportBinderId = layout.id;
+
+  async function runExport(kind: "pdf" | "png") {
+    setExportError(null);
+    setExporting(kind);
+    try {
+      if (kind === "pdf") {
+        await downloadExport(
+          `/api/v1/binders/${exportBinderId}/export/inserts.pdf?page_size=${pageSize}`,
+          `${slug}-inserts-${pageSize}.pdf`,
+        );
+      } else {
+        await downloadExport(
+          `/api/v1/binders/${exportBinderId}/export/spread/${spreadIndex}.png`,
+          `${slug}-spread-${spreadIndex + 1}.png`,
+        );
+      }
+    } catch (err) {
+      setExportError((err as Error).message);
+    } finally {
+      setExporting(null);
+    }
+  }
+
   const poolCards = (poolSet?.cards ?? []).filter((c) => !ownedOnly || c.is_owned);
 
   return (
@@ -315,7 +409,37 @@ export default function BinderDesignerPage() {
         <Button variant="secondary" onClick={redo} disabled={!redoStack.length}>
           Redo
         </Button>
+        <Segmented<"letter" | "a4">
+          value={pageSize}
+          onChange={setPageSize}
+          options={[
+            { value: "letter", label: "LETTER" },
+            { value: "a4", label: "A4" },
+          ]}
+        />
+        <Button
+          variant="secondary"
+          onClick={() => runExport("pdf")}
+          disabled={exporting !== null}
+          title="Print-ready insert sheets at exact size. Print at 100% scale."
+        >
+          {exporting === "pdf" ? "Exporting..." : "Insert PDF"}
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={() => runExport("png")}
+          disabled={exporting !== null}
+          title="Preview this spread as a PNG"
+        >
+          {exporting === "png" ? "Rendering..." : "Spread PNG"}
+        </Button>
       </PageHeader>
+
+      {exportError && (
+        <Callout tone="danger" className="mb-4">
+          {exportError}
+        </Callout>
+      )}
 
       {setPlacements.isError && (
         <Callout tone="danger" className="mb-4">
@@ -360,19 +484,120 @@ export default function BinderDesignerPage() {
                   options={[
                     { value: "set_order", label: "set order" },
                     { value: "rarity_tiered", label: "rarity" },
+                    { value: "michi", label: "michi" },
                   ]}
                 />
+
+                {mode === "michi" && (
+                  <div className="flex flex-col gap-2 rounded-lg border border-line bg-inset p-2.5">
+                    <label className="font-mono text-[11px] uppercase tracking-[0.08em] text-ink-3">
+                      Group by
+                    </label>
+                    <Select
+                      value={clusterKey}
+                      onChange={(e) => setClusterKey(e.target.value as ClusterKey)}
+                      aria-label="Michi cluster key"
+                    >
+                      <option value="species">Pokemon species</option>
+                      <option value="artist">Illustrator</option>
+                      <option value="colour">Dominant colour</option>
+                      <option value="evolution">Evolution line</option>
+                    </Select>
+
+                    <div className="flex items-center justify-between">
+                      <SectionLabel>Score weights</SectionLabel>
+                      <button
+                        type="button"
+                        className="font-mono text-[10.5px] text-ink-3 underline hover:text-ink"
+                        onClick={() => setWeights(DEFAULT_MICHI_WEIGHTS)}
+                      >
+                        reset
+                      </button>
+                    </div>
+                    {WEIGHT_FIELDS.map(({ key, label, hint }) => (
+                      <div key={String(key)} className="flex items-center gap-2">
+                        <span
+                          className="w-[68px] shrink-0 font-mono text-[10.5px] text-ink-3"
+                          title={hint}
+                        >
+                          {label}
+                        </span>
+                        <input
+                          type="range"
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          value={weights[key]}
+                          aria-label={`${label} weight`}
+                          onChange={(e) =>
+                            setWeights((prev: MichiWeights) => ({ ...prev, [key]: Number(e.target.value) }))
+                          }
+                          className="h-1 flex-1 accent-accent"
+                        />
+                        <span className="w-8 shrink-0 text-right font-mono text-[10.5px] text-ink-2">
+                          {weights[key].toFixed(2)}
+                        </span>
+                      </div>
+                    ))}
+                    <p className="text-[10.5px] leading-snug text-ink-3">
+                      Weights are taste, not truth — they decide which of the best-of-24 candidate
+                      layouts wins. Colour needs <code>bb binder extract-colors</code> to have run.
+                    </p>
+                  </div>
+                )}
+
                 <Button
                   variant="secondary"
-                  onClick={handleAutoLayout}
-                  disabled={autoLayout.isPending}
+                  onClick={mode === "michi" ? handleMichiLayout : handleAutoLayout}
+                  disabled={autoLayout.isPending || michiLayout.isPending}
                 >
-                  {autoLayout.isPending ? "Laying out..." : "Fill binder"}
+                  {autoLayout.isPending || michiLayout.isPending
+                    ? "Laying out..."
+                    : "Fill binder"}
                 </Button>
                 <p className="text-[11px] text-ink-3">
                   Replaces every placement and clears the undo history.
                 </p>
-                {autoLayout.data && (
+                {mode === "michi" && michiLayout.data && (
+                  <div className="flex flex-col gap-1 rounded-lg border border-line bg-inset p-2.5">
+                    <p className="text-[11.5px] text-ink-2">
+                      Placed {michiLayout.data.placed} across {michiLayout.data.groups} spreads
+                      {michiLayout.data.unplaced > 0 &&
+                        `; ${michiLayout.data.unplaced} left over`}
+                      , best of {michiLayout.data.trials}.
+                    </p>
+                    <p className="font-mono text-[11px] text-ink">
+                      score {michiLayout.data.score.total.toFixed(3)}
+                    </p>
+                    {(["symmetry", "colour", "hero", "fill"] as const).map((term) => {
+                      const value = michiLayout.data!.score[term];
+                      return (
+                        <div key={term} className="flex justify-between font-mono text-[10.5px]">
+                          <span className="text-ink-3">{term}</span>
+                          <span className={value === null ? "text-ink-4" : "text-ink-2"}>
+                            {value === null ? "not measured" : value.toFixed(3)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                    <div className="flex justify-between font-mono text-[10.5px]">
+                      <span className="text-ink-3">orphan</span>
+                      <span className="text-ink-2">
+                        {michiLayout.data.score.orphan.toFixed(3)} penalty
+                      </span>
+                    </div>
+                    {michiLayout.data.score.unmeasured.includes("colour") && (
+                      <p className="text-[10.5px] text-warn-text">
+                        Colour did not count: no card in this set has an extracted colour yet.
+                      </p>
+                    )}
+                  </div>
+                )}
+                {michiLayout.isError && (
+                  <Callout tone="danger">{(michiLayout.error as Error).message}</Callout>
+                )}
+
+                {autoLayout.data && mode !== "michi" && (
                   <>
                     <p className="text-[11.5px] text-ink-2">
                       Placed {autoLayout.data.placed} across {autoLayout.data.pages_used} pages

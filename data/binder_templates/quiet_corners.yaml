@@ -1,0 +1,26 @@
+# Deliberate negative space -- the Michi move a set-order binder never makes. Four cards at the
+# corners, a gutter-spanning hero in the middle, everything else left empty on purpose.
+name: "Quiet corners"
+description: "Five cards and a lot of air. For a small group that deserves room."
+rows: 3
+cols: 3
+requires_side_loading: true
+card_slots: 5
+slots:
+  - {row: 0, col: 0, kind: card}
+  - {row: 0, col: 1, kind: empty}
+  - {row: 0, col: 2, kind: empty}
+  - {row: 0, col: 3, kind: empty}
+  - {row: 0, col: 4, kind: empty}
+  - {row: 0, col: 5, kind: card}
+  - {row: 1, col: 0, kind: empty}
+  - {row: 1, col: 1, kind: empty}
+  - {row: 1, col: 2, kind: hero, col_span: 2, spans_gutter: true}
+  - {row: 1, col: 4, kind: empty}
+  - {row: 1, col: 5, kind: empty}
+  - {row: 2, col: 0, kind: card}
+  - {row: 2, col: 1, kind: empty}
+  - {row: 2, col: 2, kind: empty}
+  - {row: 2, col: 3, kind: empty}
+  - {row: 2, col: 4, kind: empty}
+  - {row: 2, col: 5, kind: card}
