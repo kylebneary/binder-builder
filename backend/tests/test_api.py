@@ -2,41 +2,24 @@ from datetime import date
 
 import pytest
 from app.api.deps import get_db
-from app.db import enable_sqlite_foreign_keys
 from app.main import app
-from app.models import Base, Card, CardVariant, PricePoint, Set
+from app.models import Card, CardVariant, PricePoint, Set
 from app.models.enums import Variant
+from conftest import create_test_schema
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+
 # Mirrors backend/migrations/versions/c8364ca2a717_baseline_schema.py -- see the same note in
 # conftest.py's db fixture.
-_CURRENT_PRICE_VIEW_SQL = """
-CREATE VIEW current_price AS
-SELECT p.*
-FROM price_point p
-INNER JOIN (
-    SELECT tcgplayer_product_id, sub_type_name, MAX(observed_on) AS max_observed_on
-    FROM price_point
-    GROUP BY tcgplayer_product_id, sub_type_name
-) latest
-ON p.tcgplayer_product_id = latest.tcgplayer_product_id
-AND p.sub_type_name = latest.sub_type_name
-AND p.observed_on = latest.max_observed_on
-"""
-
-
 @pytest.fixture
 def client():
     engine = create_engine(
         "sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
-    enable_sqlite_foreign_keys(engine)
-    Base.metadata.create_all(engine)
-    with engine.begin() as conn:
-        conn.execute(text(_CURRENT_PRICE_VIEW_SQL))
+    create_test_schema(engine)
     TestSessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
     def override_get_db():
@@ -186,3 +169,35 @@ def test_goal_create_invalid_type_422(client):
 def test_goal_detail_404(client):
     r = client.get("/api/v1/goals/999999")
     assert r.status_code == 404
+
+
+def test_holdings_group_by_changes_the_shape(client):
+    """Two copies of one card in two slots: one row or two, depending on what the caller asks."""
+    variant_id = client.get("/api/v1/sets/sv8").json()["cards"][0]["variants"][0]["id"]
+    for slot in ("Box 1 - A3", "Box 1 - A4"):
+        r = client.put(
+            "/api/v1/collection/items",
+            json={"card_variant_id": variant_id, "quantity": 1, "storage_location": slot},
+        )
+        assert r.status_code == 200
+
+    rows = client.get("/api/v1/collection/holdings").json()
+    assert len(rows) == 1
+    assert rows[0]["quantity"] == 2
+    assert rows[0]["copies"] == 2
+    assert rows[0]["locations"] == ["Box 1 - A3", "Box 1 - A4"]
+    assert rows[0]["storage_location"] is None
+
+    rows = client.get("/api/v1/collection/holdings?group_by=condition,location").json()
+    assert len(rows) == 2
+    assert sorted(r["storage_location"] for r in rows) == ["Box 1 - A3", "Box 1 - A4"]
+
+    # An empty value is "group by variant alone", not "use the default".
+    rows = client.get("/api/v1/collection/holdings?group_by=").json()
+    assert len(rows) == 1
+
+
+def test_holdings_group_by_rejects_an_unknown_field(client):
+    r = client.get("/api/v1/collection/holdings?group_by=condition,shelf")
+    assert r.status_code == 422
+    assert "group_by accepts" in r.json()["detail"]

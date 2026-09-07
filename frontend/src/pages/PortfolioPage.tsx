@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   CartesianGrid,
   Line,
@@ -8,7 +9,8 @@ import {
   YAxis,
 } from "recharts";
 import { useHoldings, usePortfolio, usePortfolioHistory } from "../lib/queries";
-import { formatMoney, parseMoney } from "../lib/types";
+import type { HoldingGroupKey } from "../lib/types";
+import { DEFAULT_GROUP_KEYS, formatMoney, parseMoney } from "../lib/types";
 import HoldingsTable from "../components/HoldingsTable";
 import { tooltipStyles, useChartColors } from "../lib/chartTheme";
 import {
@@ -24,7 +26,8 @@ import {
 export default function PortfolioPage() {
   const { data: summary, isLoading: summaryLoading } = usePortfolio();
   const { data: history, isLoading: historyLoading } = usePortfolioHistory();
-  const { data: holdings, isLoading: holdingsLoading } = useHoldings();
+  const [groupBy, setGroupBy] = useState<HoldingGroupKey[]>(DEFAULT_GROUP_KEYS);
+  const { data: holdings, isLoading: holdingsLoading } = useHoldings(groupBy);
 
   if (summaryLoading || historyLoading) return <LoadingState />;
   if (!summary) return <ErrorState message="No portfolio data yet." />;
@@ -75,7 +78,7 @@ export default function PortfolioPage() {
             Loading holdings
           </p>
         ) : (
-          <HoldingsTable holdings={holdings ?? []} />
+          <HoldingsTable holdings={holdings ?? []} groupBy={groupBy} onGroupByChange={setGroupBy} />
         )}
       </Panel>
     </Page>

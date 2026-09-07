@@ -2,10 +2,10 @@ from datetime import date
 
 import pytest
 from app.api.deps import get_db
-from app.db import enable_sqlite_foreign_keys
 from app.main import app
-from app.models import Base, Card, CardVariant, Collection, CollectionItem, Set
+from app.models import Card, CardVariant, Collection, CollectionItem, Set
 from app.models.enums import Variant
+from conftest import create_test_schema
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -21,8 +21,7 @@ def client():
     engine = create_engine(
         "sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
-    enable_sqlite_foreign_keys(engine)
-    Base.metadata.create_all(engine)
+    create_test_schema(engine)
     TestSessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
     def override_get_db():

@@ -354,6 +354,9 @@ class HoldingOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     item_id: int
+    item_ids: list[int]
+    copies: int
+    locations: list[str]
     card_variant_id: int
     card_id: int
     ptcg_card_id: str

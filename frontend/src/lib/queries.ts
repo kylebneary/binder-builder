@@ -11,6 +11,7 @@ import type {
   GoalDetailOut,
   GoalIn,
   GoalOut,
+  HoldingGroupKey,
   HoldingOut,
   PlacementBatchIn,
   PlacementOut,
@@ -208,10 +209,15 @@ export function useAutoLayout(binderId: number | undefined) {
 }
 
 /** The whole collection in one request. Sorting and filtering happen client-side -- see
- * services/portfolio.list_holdings for why the payload is returned whole. */
-export function useHoldings() {
+ * services/portfolio.list_holdings for why the payload is returned whole.
+ *
+ * Grouping is *not* client-side: what counts as one holding decides what a row's quantity and
+ * value mean, so the server does it and the client asks for the shape it wants. Changing the
+ * keys refetches, which is why they are part of the query key. */
+export function useHoldings(groupBy: HoldingGroupKey[]) {
+  const key = [...groupBy].sort().join(",");
   return useQuery({
-    queryKey: ["collection", "holdings"],
-    queryFn: () => api<HoldingOut[]>("/collection/holdings"),
+    queryKey: ["collection", "holdings", key],
+    queryFn: () => api<HoldingOut[]>(`/collection/holdings?group_by=${encodeURIComponent(key)}`),
   });
 }

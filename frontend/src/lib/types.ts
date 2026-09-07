@@ -338,9 +338,19 @@ export interface AutoLayoutOut {
   skipped_no_variant: number;
 }
 
-/** One owned card, flattened for the holdings table. Mirrors HoldingOut. */
+/** The fields that can make a holding distinct. Mirrors HoldingGroupKey. The card variant is
+ * always part of the key, so it is not listed here. */
+export type HoldingGroupKey = "condition" | "language" | "graded" | "grade" | "location";
+
+/** What the backend groups by when the request says nothing. Mirrors DEFAULT_GROUP_KEYS. */
+export const DEFAULT_GROUP_KEYS: HoldingGroupKey[] = ["condition", "language", "graded", "grade"];
+
+/** One holding -- a group of physical cards, not necessarily one card. Mirrors HoldingOut. */
 export interface HoldingOut {
   item_id: number;
+  item_ids: number[];
+  copies: number;
+  locations: string[];
   card_variant_id: number;
   card_id: number;
   ptcg_card_id: string;

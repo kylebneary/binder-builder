@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
@@ -11,6 +13,7 @@ from app.api.schemas import (
 )
 from app.services import collection as collection_service
 from app.services import portfolio as portfolio_service
+from app.services.portfolio import HoldingGroupKey
 
 router = APIRouter(prefix="/collection", tags=["collection"])
 
@@ -53,15 +56,39 @@ def delete_item(item_id: int, db: Session = Depends(get_db)) -> None:
 
 
 @router.get("/holdings", response_model=list[HoldingOut])
-def list_holdings(db: Session = Depends(get_db)) -> list[HoldingOut]:
+def list_holdings(
+    group_by: Annotated[
+        str | None,
+        Query(
+            description=(
+                "Comma-separated fields that make a holding distinct: condition, language, "
+                "graded, grade, location. The card variant is always included. Omit for the "
+                "default (everything but location); pass an empty string to group by variant "
+                "alone; include location for one row per physical slot."
+            )
+        ),
+    ] = None,
+    db: Session = Depends(get_db),
+) -> list[HoldingOut]:
     """Every owned card with its set, price and storage location -- the holdings table.
 
     Returns the whole collection in one response so the client can sort and filter without a
     round trip per keystroke; see services/portfolio.list_holdings for why that is the right
     trade at this collection size.
     """
+    keys: frozenset[HoldingGroupKey] | None = None
+    if group_by is not None:
+        names = [part.strip() for part in group_by.split(",") if part.strip()]
+        try:
+            keys = frozenset(HoldingGroupKey(n) for n in names)
+        except ValueError as exc:
+            valid = ", ".join(k.value for k in HoldingGroupKey)
+            raise HTTPException(
+                status_code=422, detail=f"{exc} -- group_by accepts: {valid}"
+            ) from exc
+
     collection = collection_service.get_or_create_default_collection(db)
-    holdings = portfolio_service.list_holdings(db, collection.id)
+    holdings = portfolio_service.list_holdings(db, collection.id, group_by=keys)
     return [HoldingOut.model_validate(h) for h in holdings]
 
 

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { HoldingOut } from "../lib/types";
+import type { HoldingGroupKey, HoldingOut } from "../lib/types";
 import { formatMoney, parseMoney } from "../lib/types";
 import { Chip, Input, Select, Table, Tag, Td, Th, Tr } from "./ui";
 
@@ -9,7 +9,19 @@ import { Chip, Input, Select, Table, Tag, Td, Th, Tr } from "./ui";
  * Sorting and filtering are client-side over the whole collection. At a few thousand rows that
  * is instant and avoids a request per keystroke; the backend hands over the full list for
  * exactly this reason (see services/portfolio.list_holdings).
+ *
+ * Grouping is the exception -- it is a server concern, because it decides what a row's quantity
+ * and value actually mean. The chips here change the request, not the rendering.
  */
+
+/** Label and explanation per groupable field. Order is the order the chips appear in. */
+const GROUP_OPTIONS: { key: HoldingGroupKey; label: string; hint: string }[] = [
+  { key: "condition", label: "condition", hint: "An NM and a LP copy are separate holdings" },
+  { key: "language", label: "language", hint: "An English and a Japanese copy are separate" },
+  { key: "graded", label: "graded", hint: "A slabbed copy is separate from a raw one" },
+  { key: "grade", label: "grade", hint: "A PSA 10 is separate from a PSA 9" },
+  { key: "location", label: "location", hint: "One row per physical slot -- every copy listed" },
+];
 
 type SortKey = "set" | "number" | "name" | "rarity" | "condition" | "quantity" | "value" | "location";
 
@@ -42,8 +54,9 @@ function sortValue(h: HoldingOut, key: SortKey): string | number {
     case "value":
       return parseMoney(h.market_value) ?? -1;
     case "location":
+      // A group spread across several slots sorts by its first, so it lands near its siblings.
       // Unlocated cards sort last in either direction rather than clumping at the top.
-      return h.storage_location ?? "￿";
+      return h.storage_location ?? h.locations[0] ?? "￿";
   }
 }
 
@@ -80,7 +93,15 @@ function SortHeader({
   );
 }
 
-export default function HoldingsTable({ holdings }: { holdings: HoldingOut[] }) {
+export default function HoldingsTable({
+  holdings,
+  groupBy,
+  onGroupByChange,
+}: {
+  holdings: HoldingOut[];
+  groupBy: HoldingGroupKey[];
+  onGroupByChange: (keys: HoldingGroupKey[]) => void;
+}) {
   const [query, setQuery] = useState("");
   const [setFilter, setSetFilter] = useState("");
   const [rarityFilter, setRarityFilter] = useState("");
@@ -133,7 +154,8 @@ export default function HoldingsTable({ holdings }: { holdings: HoldingOut[] }) 
 
   const shownValue = rows.reduce((sum, h) => sum + (parseMoney(h.market_value) ?? 0), 0);
   const shownCards = rows.reduce((sum, h) => sum + h.quantity, 0);
-  const located = rows.filter((h) => h.storage_location).length;
+  const located = rows.filter((h) => h.storage_location || h.locations.length > 0).length;
+  const multiCopy = rows.filter((h) => h.copies > 1).length;
 
   function handleSort(key: SortKey) {
     if (key === sort) setDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -155,8 +177,32 @@ export default function HoldingsTable({ holdings }: { holdings: HoldingOut[] }) 
   const filtersActive =
     !!query || !!setFilter || !!rarityFilter || !!conditionFilter || !ownedOnly;
 
+  function toggleGroup(key: HoldingGroupKey) {
+    onGroupByChange(
+      groupBy.includes(key) ? groupBy.filter((k) => k !== key) : [...groupBy, key],
+    );
+  }
+
+  const expanded = groupBy.includes("location");
+
   return (
     <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-ink-3">
+          A holding is one card, plus:
+        </span>
+        {GROUP_OPTIONS.map((opt) => (
+          <Chip
+            key={opt.key}
+            active={groupBy.includes(opt.key)}
+            onClick={() => toggleGroup(opt.key)}
+            title={opt.hint}
+          >
+            {opt.label}
+          </Chip>
+        ))}
+      </div>
+
       <div className="flex flex-wrap items-end gap-2.5">
         <div className="min-w-[200px] flex-1">
           <Input
@@ -166,11 +212,13 @@ export default function HoldingsTable({ holdings }: { holdings: HoldingOut[] }) 
             aria-label="Search holdings"
           />
         </div>
+        {/* !w-auto: Select hardcodes w-full and cx is a plain join, so without the important
+            prefix the base wins on CSS order and every filter stacks full-width. */}
         <Select
           value={setFilter}
           onChange={(e) => setSetFilter(e.target.value)}
           aria-label="Filter by set"
-          className="w-auto min-w-[150px]"
+          className="!w-auto min-w-[150px]"
         >
           <option value="">All sets</option>
           {sets.map((s) => (
@@ -183,7 +231,7 @@ export default function HoldingsTable({ holdings }: { holdings: HoldingOut[] }) 
           value={rarityFilter}
           onChange={(e) => setRarityFilter(e.target.value)}
           aria-label="Filter by rarity"
-          className="w-auto min-w-[130px]"
+          className="!w-auto min-w-[130px]"
         >
           <option value="">All rarities</option>
           {rarities.map((r) => (
@@ -196,7 +244,7 @@ export default function HoldingsTable({ holdings }: { holdings: HoldingOut[] }) 
           value={conditionFilter}
           onChange={(e) => setConditionFilter(e.target.value)}
           aria-label="Filter by condition"
-          className="w-auto min-w-[110px]"
+          className="!w-auto min-w-[110px]"
         >
           <option value="">All conditions</option>
           {conditions.map((c) => (
@@ -227,6 +275,12 @@ export default function HoldingsTable({ holdings }: { holdings: HoldingOut[] }) 
           <span className="text-warn-text">no storage locations recorded</span>
         ) : (
           <span>{located.toLocaleString()} located</span>
+        )}
+        {!expanded && multiCopy > 0 && (
+          <span className="text-ink-3">
+            {multiCopy.toLocaleString()} {multiCopy === 1 ? "row holds" : "rows hold"} more than one
+            copy — add <span className="text-ink">location</span> to list them separately
+          </span>
         )}
       </div>
 
@@ -278,8 +332,22 @@ export default function HoldingsTable({ holdings }: { holdings: HoldingOut[] }) 
               <Td className="font-mono text-[11.5px]">{h.condition}</Td>
               <Td className="font-mono text-[11.5px]">{h.quantity}</Td>
               <Td className="text-right font-mono text-[11.5px]">{formatMoney(h.market_value)}</Td>
-              <Td className="font-mono text-[11.5px]">
-                {h.storage_location ?? <span className="text-ink-4">—</span>}
+              {/* nowrap: a slot label is meaningless broken across lines. Table scrolls. */}
+              <Td className="whitespace-nowrap font-mono text-[11.5px]">
+                {h.storage_location ? (
+                  h.storage_location
+                ) : h.locations.length > 0 ? (
+                  // Collapsed across slots: name the count and keep the full list one hover away,
+                  // rather than picking one slot and quietly implying the others do not exist.
+                  <span
+                    title={h.locations.join(", ")}
+                    className="cursor-help border-b border-dotted border-ink-4"
+                  >
+                    {h.locations.length} locations
+                  </span>
+                ) : (
+                  <span className="text-ink-4">—</span>
+                )}
               </Td>
             </Tr>
           ))
