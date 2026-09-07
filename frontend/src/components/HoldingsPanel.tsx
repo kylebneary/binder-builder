@@ -1,10 +1,14 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { HoldingGroupKey, HoldingOut } from "../lib/types";
 import { formatMoney, parseMoney } from "../lib/types";
-import { Chip, Input, Select, Table, Tag, Td, Th, Tr } from "./ui";
+import { CardTileBase } from "./CardTile";
+import { Chip, Input, Segmented, Select, Table, Tag, Td, Th, Tr } from "./ui";
 
 /**
- * The owned-cards table: sort, filter, and find where a card physically is.
+ * The owned cards: sort, filter, and find where a card physically is, as a table or a card grid.
+ *
+ * Both views render the same filtered, sorted rows -- the view switch is presentation only, so a
+ * filter set up in one carries into the other.
  *
  * Sorting and filtering are client-side over the whole collection. At a few thousand rows that
  * is instant and avoids a request per keystroke; the backend hands over the full list for
@@ -22,6 +26,35 @@ const GROUP_OPTIONS: { key: HoldingGroupKey; label: string; hint: string }[] = [
   { key: "grade", label: "grade", hint: "A PSA 10 is separate from a PSA 9" },
   { key: "location", label: "location", hint: "One row per physical slot -- every copy listed" },
 ];
+
+// Row caps. The table is cheap per row; a grid tile is an image request, so it stops sooner.
+const TABLE_CAP = 500;
+const GRID_CAP = 120;
+
+type View = "grid" | "table";
+
+const VIEW_STORAGE_KEY = "bb.holdings.view";
+
+/** Remembering the view is a per-user habit, not app state -- localStorage, not the server.
+ * Both accessors are guarded: a private window or blocked site data makes them throw, and a
+ * holdings list that cannot render because of a remembered preference would be a poor trade. */
+function useStoredView(): [View, (v: View) => void] {
+  const [view, setView] = useState<View>(() => {
+    try {
+      return localStorage.getItem(VIEW_STORAGE_KEY) === "grid" ? "grid" : "table";
+    } catch {
+      return "table";
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(VIEW_STORAGE_KEY, view);
+    } catch {
+      /* not worth surfacing: the view still works, it just will not be remembered. */
+    }
+  }, [view]);
+  return [view, setView];
+}
 
 type SortKey = "set" | "number" | "name" | "rarity" | "condition" | "quantity" | "value" | "location";
 
@@ -93,7 +126,33 @@ function SortHeader({
   );
 }
 
-export default function HoldingsTable({
+/** The same rows as tiles. Location goes on the face of the tile rather than behind a hover,
+ * because "where is this card?" is the question the grid is worst at answering otherwise. */
+function HoldingsGrid({ holdings }: { holdings: HoldingOut[] }) {
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7">
+      {holdings.map((h) => (
+        <CardTileBase
+          key={h.item_id}
+          name={h.name}
+          number={h.number}
+          rarity={h.rarity}
+          imageSmall={h.image_small}
+          price={h.market_value}
+          owned
+          variantLabel={h.variant === "normal" ? undefined : h.variant.replace(/_/g, " ")}
+          quantity={h.quantity}
+          condition={h.condition}
+          location={
+            h.storage_location ?? (h.locations.length > 1 ? `${h.locations.length} locations` : null)
+          }
+        />
+      ))}
+    </div>
+  );
+}
+
+export default function HoldingsPanel({
   holdings,
   groupBy,
   onGroupByChange,
@@ -107,6 +166,7 @@ export default function HoldingsTable({
   const [rarityFilter, setRarityFilter] = useState("");
   const [conditionFilter, setConditionFilter] = useState("");
   const [ownedOnly, setOwnedOnly] = useState(true);
+  const [view, setView] = useStoredView();
   const [sort, setSort] = useState<SortKey>("set");
   const [dir, setDir] = useState<"asc" | "desc">("asc");
 
@@ -166,6 +226,12 @@ export default function HoldingsTable({
     }
   }
 
+  /** Header clicks toggle direction on re-click; picking from the grid's dropdown should not. */
+  function selectSort(key: SortKey) {
+    setSort(key);
+    setDir(key === "value" || key === "quantity" ? "desc" : "asc");
+  }
+
   function reset() {
     setQuery("");
     setSetFilter("");
@@ -173,6 +239,8 @@ export default function HoldingsTable({
     setConditionFilter("");
     setOwnedOnly(true);
   }
+
+  const cap = view === "grid" ? GRID_CAP : TABLE_CAP;
 
   const filtersActive =
     !!query || !!setFilter || !!rarityFilter || !!conditionFilter || !ownedOnly;
@@ -201,6 +269,15 @@ export default function HoldingsTable({
             {opt.label}
           </Chip>
         ))}
+        <Segmented<View>
+          className="ml-auto"
+          value={view}
+          onChange={setView}
+          options={[
+            { value: "table", label: "TABLE" },
+            { value: "grid", label: "GRID" },
+          ]}
+        />
       </div>
 
       <div className="flex flex-wrap items-end gap-2.5">
@@ -284,6 +361,36 @@ export default function HoldingsTable({
         )}
       </div>
 
+      {view === "grid" && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-ink-3">
+            Sort
+          </span>
+          <Select
+            value={sort}
+            onChange={(e) => selectSort(e.target.value as SortKey)}
+            aria-label="Sort holdings"
+            className="!w-auto min-w-[130px]"
+          >
+            {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+              <option key={k} value={k}>
+                {SORT_LABELS[k]}
+              </option>
+            ))}
+          </Select>
+          <Chip
+            tone="neutral"
+            onClick={() => setDir((d) => (d === "asc" ? "desc" : "asc"))}
+            title={dir === "asc" ? "Ascending" : "Descending"}
+          >
+            {dir === "asc" ? "↑ asc" : "↓ desc"}
+          </Chip>
+        </div>
+      )}
+
+      {view === "grid" ? (
+        <HoldingsGrid holdings={rows.slice(0, GRID_CAP)} />
+      ) : (
       <Table
         head={
           <>
@@ -317,7 +424,7 @@ export default function HoldingsTable({
             </Td>
           </Tr>
         ) : (
-          rows.slice(0, 500).map((h) => (
+          rows.slice(0, TABLE_CAP).map((h) => (
             <Tr key={h.item_id}>
               <Td className="text-[12px] text-ink-3">{h.set_name}</Td>
               <Td className="font-mono text-[11.5px] text-accent-text">{h.number}</Td>
@@ -353,11 +460,12 @@ export default function HoldingsTable({
           ))
         )}
       </Table>
+      )}
 
-      {rows.length > 500 && (
+      {rows.length > cap && (
         <p className="text-[11.5px] text-ink-3">
-          Showing the first 500 of {rows.length.toLocaleString()} matching rows — narrow the
-          filters to see the rest.
+          Showing the first {cap.toLocaleString()} of {rows.length.toLocaleString()} matching rows
+          — narrow the filters to see the rest.
         </p>
       )}
     </div>

@@ -105,6 +105,20 @@ Collection-entry spot-check against real TCGplayer prices (enter a real collecti
 bulk-entry UI, compare portfolio value) still hasn't happened -- that's the remaining piece before
 Phase 1's exit criterion is *really* met, independent of the sealed-map curation above.
 
+**Holdings on the Portfolio page (2026-09-05/06).** Not a numbered task -- 1.13 shipped the
+portfolio *dashboard* (value, chart) and nothing that listed what the collection actually
+contains. `HoldingsPanel` now does: filter, sort, group, and read where a card physically sits,
+as either a table or a card grid.
+
+There is an abandoned branch, `feat/phase-1-holdings-view`, that built a different version of
+this in August (server-side sort/filter/pagination, `services/holdings.py`, `HoldingsBrowser`,
+roadmap tasks it numbered 1.15-1.17). **It was never merged and should not be** -- it predates
+`collection_item` becoming one row per physical card, so its endpoint returns ungrouped rows with
+no way to ask for anything else, and it collides with the shipped `GET /collection/holdings` on
+both URL and response model. Merging main into it gives a tree that does not compile. Its one
+genuinely new idea, the card-grid view, was extracted onto main instead; everything else there is
+superseded. Do not re-derive this -- read the branch only if you want the pagination design back.
+
 ## Phase 2 — Completion optimizer
 
 **Branch:** `feat/phase-2-optimizer`
