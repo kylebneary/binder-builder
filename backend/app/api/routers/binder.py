@@ -20,14 +20,18 @@ from app.api.schemas import (
     BinderLayoutOut,
     BinderOut,
     InsertAssetOut,
+    MichiLayoutIn,
+    MichiLayoutOut,
     PlacementBatchIn,
     PlacementOut,
 )
 from app.binder.export import SHEETS_MM, ExportError
 from app.binder.layout import AutoLayoutMode, PlacementSpec
+from app.binder.michi import ClusterKey, ScoreWeights
 from app.services import binder as binder_service
 from app.services import binder_export
 from app.services import inserts as inserts_service
+from app.services import michi as michi_service
 from app.services.binder import BinderData, LayoutError, PlacementBatch
 from app.services.inserts import InsertError
 
@@ -251,3 +255,49 @@ def export_spread(
     except ExportError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return FileResponse(tmp, media_type="image/png", filename=tmp.name)
+
+
+@router.post("/{binder_id}/michi-layout", response_model=MichiLayoutOut)
+def michi_layout(
+    binder_id: int, body: MichiLayoutIn, db: Session = Depends(get_db)
+) -> MichiLayoutOut:
+    """Lay a set out Michi-style: cluster, template, assign, score, best of N.
+
+    Separate from /auto-layout rather than another mode on it: the inputs barely overlap (cluster
+    key and score weights instead of rarity grouping) and so does the result, which carries a
+    score breakdown the other modes have nothing to say about.
+    """
+    try:
+        key = ClusterKey(body.cluster_key)
+    except ValueError as exc:
+        valid = ", ".join(k.value for k in ClusterKey)
+        raise HTTPException(
+            status_code=422, detail=f"Unknown cluster_key {body.cluster_key!r} -- use: {valid}"
+        ) from exc
+
+    w = body.weights
+    try:
+        result = michi_service.apply_michi_layout(
+            db,
+            binder_id,
+            body.set_id,
+            cluster_key=key,
+            weights=ScoreWeights(w.symmetry, w.colour, w.hero, w.fill, w.orphan),
+            trials=body.trials,
+            seed=body.seed,
+            canonical_only=body.canonical_only,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except LayoutError as exc:
+        return JSONResponse(status_code=409, content={"detail": exc.errors})
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return MichiLayoutOut(
+        placed=result.placed,
+        unplaced=result.unplaced,
+        groups=result.groups,
+        trials=result.trials,
+        score=result.score,
+    )

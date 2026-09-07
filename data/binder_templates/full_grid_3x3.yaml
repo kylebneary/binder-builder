@@ -1,0 +1,27 @@
+# The baseline: every pocket a card, no inserts, no negative space. Not Michi at all -- it is
+# here because the scorer needs something to beat, and because a top-loading binder can use it.
+name: "Full grid"
+description: "Eighteen cards, nothing else. Works in any binder."
+rows: 3
+cols: 3
+requires_side_loading: false
+card_slots: 18
+slots:
+  - {row: 0, col: 0, kind: card}
+  - {row: 0, col: 1, kind: card}
+  - {row: 0, col: 2, kind: card}
+  - {row: 0, col: 3, kind: card}
+  - {row: 0, col: 4, kind: card}
+  - {row: 0, col: 5, kind: card}
+  - {row: 1, col: 0, kind: card}
+  - {row: 1, col: 1, kind: card}
+  - {row: 1, col: 2, kind: card}
+  - {row: 1, col: 3, kind: card}
+  - {row: 1, col: 4, kind: card}
+  - {row: 1, col: 5, kind: card}
+  - {row: 2, col: 0, kind: card}
+  - {row: 2, col: 1, kind: card}
+  - {row: 2, col: 2, kind: card}
+  - {row: 2, col: 3, kind: card}
+  - {row: 2, col: 4, kind: card}
+  - {row: 2, col: 5, kind: card}

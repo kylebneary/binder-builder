@@ -1,0 +1,19 @@
+# Spec archetype: full-page art with accent cards. The whole left page is one printed image; the
+# right page carries the cards it is there to frame.
+name: "Full page art"
+description: "Left page is a single 3x3 insert; nine cards on the right."
+rows: 3
+cols: 3
+requires_side_loading: false
+card_slots: 9
+slots:
+  - {row: 0, col: 0, kind: insert, row_span: 3, col_span: 3}
+  - {row: 0, col: 3, kind: card}
+  - {row: 0, col: 4, kind: card}
+  - {row: 0, col: 5, kind: card}
+  - {row: 1, col: 3, kind: card}
+  - {row: 1, col: 4, kind: hero}
+  - {row: 1, col: 5, kind: card}
+  - {row: 2, col: 3, kind: card}
+  - {row: 2, col: 4, kind: card}
+  - {row: 2, col: 5, kind: card}

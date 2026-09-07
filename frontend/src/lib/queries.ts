@@ -13,6 +13,8 @@ import type {
   GoalOut,
   HoldingGroupKey,
   HoldingOut,
+  MichiLayoutIn,
+  MichiLayoutOut,
   PlacementBatchIn,
   PlacementOut,
   PortfolioSummaryOut,
@@ -199,6 +201,22 @@ export function useAutoLayout(binderId: number | undefined) {
   return useMutation({
     mutationFn: (body: AutoLayoutIn) =>
       api<AutoLayoutOut>(`/binders/${binderId}/auto-layout`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["binders", binderId, "layout"] });
+    },
+  });
+}
+
+/** Michi auto-layout. Separate from useAutoLayout: different inputs, and a result carrying a
+ * score breakdown the other modes have nothing to say about. */
+export function useMichiLayout(binderId: number | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: MichiLayoutIn) =>
+      api<MichiLayoutOut>(`/binders/${binderId}/michi-layout`, {
         method: "POST",
         body: JSON.stringify(body),
       }),

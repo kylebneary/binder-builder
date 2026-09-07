@@ -1,0 +1,24 @@
+# Spec archetype: single-Pokemon focus. One card enlarged to a 2x2 block anchors the left page,
+# the rest of the line arranged around it.
+name: "Single Pokemon focus"
+description: "A 2x2 hero block on the left page with the rest of the line around it."
+rows: 3
+cols: 3
+requires_side_loading: false
+card_slots: 13
+slots:
+  - {row: 0, col: 0, kind: hero, row_span: 2, col_span: 2}
+  - {row: 0, col: 2, kind: card}
+  - {row: 1, col: 2, kind: card}
+  - {row: 0, col: 3, kind: card}
+  - {row: 0, col: 4, kind: card}
+  - {row: 0, col: 5, kind: card}
+  - {row: 1, col: 3, kind: card}
+  - {row: 1, col: 4, kind: card}
+  - {row: 1, col: 5, kind: card}
+  - {row: 2, col: 0, kind: empty}
+  - {row: 2, col: 1, kind: card}
+  - {row: 2, col: 2, kind: card}
+  - {row: 2, col: 3, kind: card}
+  - {row: 2, col: 4, kind: card}
+  - {row: 2, col: 5, kind: empty}
