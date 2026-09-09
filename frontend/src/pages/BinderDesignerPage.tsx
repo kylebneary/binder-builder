@@ -146,6 +146,11 @@ const WEIGHT_FIELDS: { key: keyof MichiWeights; label: string; hint: string }[] 
  * (an export refuses on things the user can fix: no inserts placed, art too big for the sheet).
  */
 async function downloadExport(url: string, filename: string): Promise<void> {
+  if (import.meta.env.VITE_DEMO_MODE === "true") {
+    throw new Error(
+      "Export needs the real backend (PDF/PNG rendering) -- clone the repo to try it locally.",
+    );
+  }
   const res = await fetch(url);
   if (!res.ok) {
     let detail = `${res.status}`;
