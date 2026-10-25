@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:demo": "tsc -b && vite build --mode demo --base=/static/binder-builder-demo/",
     "preview": "vite preview",
     "lint": "eslint ."
   },
