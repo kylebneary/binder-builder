@@ -4,8 +4,12 @@ Placement edits go through one batch endpoint rather than per-pocket calls: a dr
 two cards is a single gesture, and keeping it a single request is what lets the client undo it
 with one inverse call.
 """
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import JSONResponse
+import tempfile
+from pathlib import Path
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
@@ -15,12 +19,17 @@ from app.api.schemas import (
     BinderIn,
     BinderLayoutOut,
     BinderOut,
+    InsertAssetOut,
     PlacementBatchIn,
     PlacementOut,
 )
+from app.binder.export import SHEETS_MM, ExportError
 from app.binder.layout import AutoLayoutMode, PlacementSpec
 from app.services import binder as binder_service
+from app.services import binder_export
+from app.services import inserts as inserts_service
 from app.services.binder import BinderData, LayoutError, PlacementBatch
+from app.services.inserts import InsertError
 
 router = APIRouter(prefix="/binders", tags=["binders"])
 
@@ -35,6 +44,56 @@ def _data(body: BinderIn) -> BinderData:
         gutter_mm=body.gutter_mm,
         notes=body.notes,
     )
+
+
+# --- insert assets (3.4) ------------------------------------------------------------------------
+# Declared before /{binder_id}: FastAPI matches in declaration order, and "inserts" would
+# otherwise be parsed as a binder id and 422 rather than reaching these.
+
+
+@router.get("/inserts", response_model=list[InsertAssetOut])
+def list_inserts(db: Session = Depends(get_db)) -> list[InsertAssetOut]:
+    return [InsertAssetOut.model_validate(a) for a in inserts_service.list_inserts(db)]
+
+
+@router.post("/inserts", response_model=InsertAssetOut, status_code=201)
+async def upload_insert(
+    file: Annotated[UploadFile, File(description="The artwork; raster only.")],
+    name: Annotated[str, Form()] = "",
+    width_pockets: Annotated[int, Form()] = 1,
+    height_pockets: Annotated[int, Form()] = 1,
+    source_note: Annotated[str | None, Form()] = None,
+    db: Session = Depends(get_db),
+) -> InsertAssetOut:
+    """Store an insert, refusing anything that cannot print at 300 DPI at its target size.
+
+    422 rather than 400 on a too-small image: it is a validation failure about the body's content,
+    and the message carries the pixel dimensions the file would need.
+    """
+    data = await file.read()
+    try:
+        asset = inserts_service.save_insert(
+            db,
+            name=name,
+            data=data,
+            filename=file.filename or "upload",
+            width_pockets=width_pockets,
+            height_pockets=height_pockets,
+            source_note=source_note,
+        )
+    except InsertError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return InsertAssetOut.model_validate(asset)
+
+
+@router.delete("/inserts/{insert_id}", status_code=204)
+def delete_insert(insert_id: int, db: Session = Depends(get_db)) -> None:
+    try:
+        deleted = inserts_service.delete_insert(db, insert_id)
+    except InsertError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Insert {insert_id} not found")
 
 
 @router.get("", response_model=list[BinderOut])
@@ -154,3 +213,41 @@ def import_layout(binder_id: int, payload: dict, db: Session = Depends(get_db)) 
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return BinderOut.model_validate(binder)
+
+
+# --- print export (3.9 / 3.10) -------------------------------------------------------------------
+# Both write to a temp file and stream it back. The alternative -- building in memory -- would mean
+# a second code path for ReportLab and Pillow, when a file is what both libraries write natively
+# and what the CLI needs anyway.
+
+
+@router.get("/{binder_id}/export/inserts.pdf")
+def export_inserts(
+    binder_id: int,
+    page_size: Annotated[str, Query(description=f"One of: {', '.join(SHEETS_MM)}")] = "letter",
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    """The print deliverable: every placed insert at exact trim size, bled, with crop marks."""
+    tmp = Path(tempfile.mkdtemp(prefix="bb-inserts-")) / f"binder-{binder_id}-inserts.pdf"
+    try:
+        binder_export.export_binder_inserts_pdf(db, binder_id, tmp, page_size=page_size)
+    except ExportError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return FileResponse(tmp, media_type="application/pdf", filename=tmp.name)
+
+
+@router.get("/{binder_id}/export/spread/{spread_index}.png")
+def export_spread(
+    binder_id: int,
+    spread_index: int,
+    dpi: Annotated[int, Query(ge=72, le=600)] = 150,
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    """Preview one facing pair at true proportions."""
+    name = f"binder-{binder_id}-spread-{spread_index}.png"
+    tmp = Path(tempfile.mkdtemp(prefix="bb-spread-")) / name
+    try:
+        binder_export.export_binder_spread_png(db, binder_id, spread_index, tmp, dpi=dpi)
+    except ExportError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return FileResponse(tmp, media_type="image/png", filename=tmp.name)

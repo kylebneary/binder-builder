@@ -331,6 +331,21 @@ class BinderLayoutOut(BinderOut):
     not_owned_count: int
 
 
+class InsertAssetOut(BaseModel):
+    """A stored insert. `dpi` is the measured effective DPI at the declared pocket span, not
+    metadata read out of the file -- see services/inserts.py."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    image_path: str
+    width_pockets: int
+    height_pockets: int
+    dpi: int | None
+    source_note: str | None
+
+
 class AutoLayoutIn(BaseModel):
     set_id: int
     mode: str = "set_order"

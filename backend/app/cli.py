@@ -8,6 +8,7 @@ import typer
 from rich.console import Console
 from sqlalchemy import select
 
+from app.binder.export import ExportError
 from app.binder.layout import AutoLayoutMode
 from app.config import get_settings
 from app.db import SessionLocal
@@ -29,9 +30,14 @@ from app.models.enums import GoalType
 from app.services import binder as binder_service
 from app.services import goals as goals_service
 from app.services.binder import BinderData, LayoutError
+from app.services.binder_export import (
+    export_binder_inserts_pdf,
+    export_binder_spread_png,
+)
 from app.services.collection import get_or_create_default_collection
 from app.services.csv_export import export_collection_csv
 from app.services.csv_import import apply_import, dry_run_import, parse_csv
+from app.services.inserts import InsertError, list_inserts, save_insert
 from app.services.simulation_runs import run_search_and_cache
 from app.sim.optimizer import Objective
 from app.sim.types import CostParams
@@ -701,6 +707,101 @@ def binder_import_json(
     finally:
         db.close()
     console.print(f"Imported into binder {binder.id}: {binder.name!r}")
+
+
+@binder_app.command("add-insert")
+def binder_add_insert(
+    path: str,
+    name: str = typer.Option("", "--name", help="Defaults to the file's stem."),
+    width: int = typer.Option(1, "--width", help="Pockets wide."),
+    height: int = typer.Option(1, "--height", help="Pockets tall."),
+    source_note: str | None = typer.Option(None, "--source", help="Where the art came from."),
+) -> None:
+    """Store an insert image, refusing anything under 300 DPI at its target size."""
+    file_path = Path(path)
+    if not file_path.exists():
+        console.print(f"[red]No such file: {path}[/red]")
+        raise typer.Exit(code=1)
+    db = SessionLocal()
+    try:
+        asset = save_insert(
+            db,
+            name=name,
+            data=file_path.read_bytes(),
+            filename=file_path.name,
+            width_pockets=width,
+            height_pockets=height,
+            source_note=source_note,
+        )
+    except InsertError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from None
+    finally:
+        db.close()
+    console.print(
+        f"Insert {asset.id}: {asset.name!r} -- {asset.width_pockets}x{asset.height_pockets} "
+        f"pockets at {asset.dpi} DPI"
+    )
+
+
+@binder_app.command("list-inserts")
+def binder_list_inserts() -> None:
+    """List stored insert assets."""
+    db = SessionLocal()
+    try:
+        assets = list_inserts(db)
+    finally:
+        db.close()
+    if not assets:
+        console.print("No inserts yet -- add one with `bb binder add-insert <path>`.")
+        return
+    for a in assets:
+        console.print(
+            f"{a.id:4d}  {a.name[:32]:32s}  {a.width_pockets}x{a.height_pockets}  {a.dpi} DPI"
+        )
+
+
+@binder_app.command("export-pdf")
+def binder_export_pdf(
+    binder_id: int,
+    path: str = typer.Option("inserts.pdf", "--path", help="Where to write the PDF."),
+    page_size: str = typer.Option("letter", "--page-size", help="letter | a4"),
+) -> None:
+    """Write the print-ready insert sheets.
+
+    Print at 100% scale with "fit to page" off, or the whole point of the exact millimetre
+    geometry is lost.
+    """
+    db = SessionLocal()
+    try:
+        out = export_binder_inserts_pdf(db, binder_id, path, page_size=page_size)
+    except ExportError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from None
+    finally:
+        db.close()
+    console.print(f"Wrote {out}")
+    console.print("[yellow]Print at 100% scale -- do not use 'fit to page'.[/yellow]")
+
+
+@binder_app.command("export-png")
+def binder_export_png(
+    binder_id: int,
+    spread: int = typer.Option(0, "--spread", help="Spread index; 0 is pages 1-2."),
+    path: str | None = typer.Option(None, "--path", help="Defaults to spread-<n>.png."),
+    dpi: int = typer.Option(150, "--dpi", help="Preview resolution."),
+) -> None:
+    """Render a spread preview at true proportions."""
+    out_path = path or f"spread-{spread}.png"
+    db = SessionLocal()
+    try:
+        out = export_binder_spread_png(db, binder_id, spread, out_path, dpi=dpi)
+    except ExportError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from None
+    finally:
+        db.close()
+    console.print(f"Wrote {out}")
 
 
 if __name__ == "__main__":

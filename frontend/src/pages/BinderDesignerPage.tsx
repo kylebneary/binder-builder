@@ -126,6 +126,39 @@ const collisionDetection: CollisionDetection = (args) => {
   return underPointer.length > 0 ? underPointer : closestCenter(args);
 };
 
+/** Fetch a binary export and hand it to the browser as a download.
+ *
+ * Same blob-and-anchor dance as the goal shopping-list export in GoalDetailPage -- deliberately
+ * not a second download mechanism. The difference is that these come back binary, so the response
+ * is read as a blob rather than text, and a failed request carries a JSON `detail` worth showing
+ * (an export refuses on things the user can fix: no inserts placed, art too big for the sheet).
+ */
+async function downloadExport(url: string, filename: string): Promise<void> {
+  const res = await fetch(url);
+  if (!res.ok) {
+    let detail = `${res.status}`;
+    try {
+      detail = (await res.json()).detail ?? detail;
+    } catch {
+      /* not JSON; the status is all we have */
+    }
+    throw new Error(detail);
+  }
+  const blobUrl = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = blobUrl;
+  a.download = filename;
+  // Attached before clicking, and the URL revoked on a timer rather than synchronously. This is
+  // defensive rather than a fix for anything observed here: a detached anchor is ignored by some
+  // browsers, and revoking immediately can in principle pull the blob out from under a download
+  // that has not finished reading it. GoalDetailPage's text export does neither and works fine,
+  // so if these two ever get factored together, that is the direction to move it.
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 10_000);
+}
+
 export default function BinderDesignerPage() {
   const { binderId: binderIdParam } = useParams();
   const binderId = Number(binderIdParam);
@@ -136,6 +169,9 @@ export default function BinderDesignerPage() {
   const { data: sets } = useSets();
 
   const [spreadIndex, setSpreadIndex] = useState(0);
+  const [pageSize, setPageSize] = useState<"letter" | "a4">("letter");
+  const [exporting, setExporting] = useState<"pdf" | "png" | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [poolSetId, setPoolSetId] = useState<string>("");
   const [ownedOnly, setOwnedOnly] = useState(false);
   const [dragging, setDragging] = useState<
@@ -294,6 +330,33 @@ export default function BinderDesignerPage() {
   if (!layout) return <ErrorState message="Binder not found" />;
 
   const spreadCount = Math.ceil(layout.pages / 2);
+  const slug = layout.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "binder";
+  // Captured out of the closure: TypeScript will not carry the `if (!layout) return` narrowing
+  // into a function declaration.
+  const exportBinderId = layout.id;
+
+  async function runExport(kind: "pdf" | "png") {
+    setExportError(null);
+    setExporting(kind);
+    try {
+      if (kind === "pdf") {
+        await downloadExport(
+          `/api/v1/binders/${exportBinderId}/export/inserts.pdf?page_size=${pageSize}`,
+          `${slug}-inserts-${pageSize}.pdf`,
+        );
+      } else {
+        await downloadExport(
+          `/api/v1/binders/${exportBinderId}/export/spread/${spreadIndex}.png`,
+          `${slug}-spread-${spreadIndex + 1}.png`,
+        );
+      }
+    } catch (err) {
+      setExportError((err as Error).message);
+    } finally {
+      setExporting(null);
+    }
+  }
+
   const poolCards = (poolSet?.cards ?? []).filter((c) => !ownedOnly || c.is_owned);
 
   return (
@@ -315,7 +378,37 @@ export default function BinderDesignerPage() {
         <Button variant="secondary" onClick={redo} disabled={!redoStack.length}>
           Redo
         </Button>
+        <Segmented<"letter" | "a4">
+          value={pageSize}
+          onChange={setPageSize}
+          options={[
+            { value: "letter", label: "LETTER" },
+            { value: "a4", label: "A4" },
+          ]}
+        />
+        <Button
+          variant="secondary"
+          onClick={() => runExport("pdf")}
+          disabled={exporting !== null}
+          title="Print-ready insert sheets at exact size. Print at 100% scale."
+        >
+          {exporting === "pdf" ? "Exporting..." : "Insert PDF"}
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={() => runExport("png")}
+          disabled={exporting !== null}
+          title="Preview this spread as a PNG"
+        >
+          {exporting === "png" ? "Rendering..." : "Spread PNG"}
+        </Button>
       </PageHeader>
+
+      {exportError && (
+        <Callout tone="danger" className="mb-4">
+          {exportError}
+        </Callout>
+      )}
 
       {setPlacements.isError && (
         <Callout tone="danger" className="mb-4">
