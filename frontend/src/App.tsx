@@ -1,7 +1,9 @@
 import { Suspense, lazy } from "react";
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
+import DemoNav from "./components/DemoNav";
 import Nav from "./components/Nav";
 import { LoadingState } from "./components/ui";
+import { DEMO_BINDER_ID } from "./lib/demoData";
 import BinderDesignerPage from "./pages/BinderDesignerPage";
 import BindersPage from "./pages/BindersPage";
 import BulkEntryPage from "./pages/BulkEntryPage";
@@ -16,7 +18,28 @@ import SetListPage from "./pages/SetListPage";
 const PortfolioPage = lazy(() => import("./pages/PortfolioPage"));
 const GoalSimulatePage = lazy(() => import("./pages/GoalSimulatePage"));
 
+const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === "true";
+
+/**
+ * Standalone binder-designer demo: the only route demoApi.ts backs is the designer itself, so
+ * every other path (including "/") redirects straight into the one seeded binder rather than
+ * exposing pages -- Sets, Portfolio, Goals -- that would render against nothing.
+ */
+function DemoApp() {
+  return (
+    <div className="min-h-screen bg-canvas text-ink">
+      <DemoNav />
+      <Routes>
+        <Route path="/binders/:binderId" element={<BinderDesignerPage />} />
+        <Route path="*" element={<Navigate to={`/binders/${DEMO_BINDER_ID}`} replace />} />
+      </Routes>
+    </div>
+  );
+}
+
 export default function App() {
+  if (DEMO_MODE) return <DemoApp />;
+
   return (
     <div className="min-h-screen bg-canvas text-ink">
       <Routes>
