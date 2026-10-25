@@ -396,9 +396,9 @@ pockets.
 - [x] 3.3 API + UI: create a binder, drag-and-drop pocket grid, spread preview.
 - [x] 3.4 Insert upload, DPI validation, multi-pocket span placement.
 - [x] 3.5 Auto-layout: set order and rarity-tiered.
-- [ ] 3.6 Dominant-colour extraction (CIELAB, cached on `card`).
-- [ ] 3.7 Template library (`data/binder_templates/`, ~8 hand-designed 3×3 spreads).
-- [ ] 3.8 Michi auto-layout with the scoring function from `docs/05-binder-spec.md`.
+- [x] 3.6 Dominant-colour extraction (CIELAB, cached on `card`).
+- [x] 3.7 Template library (`data/binder_templates/`, ~8 hand-designed 3×3 spreads).
+- [x] 3.8 Michi auto-layout with the scoring function from `docs/05-binder-spec.md`.
 - [x] 3.9 Print export: insert PDF with bleed and crop marks, sheet packing.
 - [x] 3.10 Spread preview PNG export.
 - [x] 3.11 "Not owned" badges and count.
@@ -460,10 +460,33 @@ inserts upload with a DPI gate, print-ready sheets, and spread previews.
   and checking a cut piece against a real pocket. See the verification section of
   `docs/08-phase-3-plan.md`.
 
+**Branch 3 (`feat/phase-3-binder-michi`) is landed (2026-09-07).** 3.6, 3.7 and 3.8 complete the
+phase's build work.
+
+- **3.6.** `binder/color.py` hand-writes sRGB->CIELAB and CIEDE2000, checked against the published
+  Sharma/Wu/Dalal reference pairs -- 13 of them, matching to 1e-4. **The crop window matters more
+  than the clustering:** trimming a uniform 10% border still leaves the type-coloured frame and the
+  yellow card edge dominating, and the first real run returned 60 sv8 cards as the same yellow-green
+  to within a unit of Lab, including a Metal-type card. Sampling `ART_WINDOW` instead lifted mean
+  pairwise dE2000 across ten cards from ~1 to 26.6.
+- **3.7.** `binder/templates.py` validates every file on load -- bounds, self-overlap, one hero,
+  gutter flags that actually cross the gutter. It immediately caught `hero_center_3x3.yaml`
+  declaring `card_slots: 8` while holding 9 (the hero is a card slot). Nine templates ship,
+  capacities 5-18, at least three of which work in a top-loading binder.
+- **3.8.** `binder/michi.py` implements the spec's pipeline and score. Two deviations, both visible
+  in `ScoreBreakdown`: an **unmeasurable term is excluded and the remaining weights re-normalised**
+  rather than scored as zero (colour needs extracted colours; hero needs a hero slot), and the
+  **orphan penalty is layout-level**, so `score_layout` takes a sequence of spreads.
+- **Michi layouts write only card placements.** A template's insert slots have no artwork yet, and
+  `kind=insert` requires an `insert_asset_id`, so they are left for the designer to fill. A
+  freshly generated Michi spread therefore looks sparser than its template suggests.
+- **The phase exit criterion remains open** -- it needs a printed sheet checked against a real
+  pocket. See `docs/08-phase-3-plan.md`.
+
 **Still open in this phase.**
 
-**3.7 has one of ~8 templates.** `data/binder_templates/hero_center_3x3.yaml` establishes the file
-format (named grid, typed slots, spans, `requires_side_loading`); nothing in Python parses it yet.
+**Nothing in Phase 3's build list.** 3.1-3.13 are all done. What remains is the exit criterion
+itself: print `inserts.pdf` at 100% scale and check a cut insert against a real pocket.
 
 Also already in place for branches 2 and 3: `reportlab` and `pillow` are declared dependencies but
 imported nowhere, so 3.9/3.10 need no new deps; `card.dominant_color_lab` already exists as a

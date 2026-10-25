@@ -4,7 +4,7 @@ name: "Hero centre, mirrored wings"
 rows: 3
 cols: 3            # per page; the spread grid is 3 x 6
 requires_side_loading: true
-card_slots: 8
+card_slots: 9   # 8 card slots + the hero, which is also a card slot
 slots:
   - {row: 0, col: 0, kind: card}
   - {row: 0, col: 1, kind: card}

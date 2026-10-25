@@ -5,6 +5,7 @@ Every mutation validates the affected spreads through `binder.layout.validate_pl
 raises `LayoutError` *before* committing, so a rejected edit leaves the binder untouched. The
 unique index on (binder_id, page_index, row, col) is only a backstop; this is the real guard.
 """
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
 
 from sqlalchemy import delete, func, select
@@ -420,6 +421,43 @@ class AutoLayoutResult:
     skipped_no_variant: int = 0
 
 
+def write_placements(
+    db: Session,
+    binder: Binder,
+    placements: Sequence[PlacementSpec],
+    *,
+    replace: bool = True,
+) -> None:
+    """Validate a whole layout and persist it. Shared by every auto-layout mode.
+
+    Validation happens before the delete, so a layout that would be rejected leaves the existing
+    binder untouched rather than emptying it and then failing.
+    """
+    errors = validate_placements(placements, binder)
+    if errors:
+        raise LayoutError(errors)
+
+    if replace:
+        db.execute(delete(BinderPlacement).where(BinderPlacement.binder_id == binder.id))
+    for p in placements:
+        db.add(
+            BinderPlacement(
+                binder_id=binder.id,
+                page_index=p.page_index,
+                row=p.row,
+                col=p.col,
+                row_span=p.row_span,
+                col_span=p.col_span,
+                kind=p.kind,
+                card_variant_id=p.card_variant_id,
+                insert_asset_id=p.insert_asset_id,
+                spans_gutter=p.spans_gutter,
+                z_order=p.z_order,
+            )
+        )
+    db.commit()
+
+
 def apply_auto_layout(
     db: Session,
     binder_id: int,
@@ -486,29 +524,7 @@ def apply_auto_layout(
         start_subset_on_new_page=start_subset_on_new_page,
     )
 
-    errors = validate_placements(placements, binder)
-    if errors:
-        raise LayoutError(errors)
-
-    if replace:
-        db.execute(delete(BinderPlacement).where(BinderPlacement.binder_id == binder_id))
-    for p in placements:
-        db.add(
-            BinderPlacement(
-                binder_id=binder_id,
-                page_index=p.page_index,
-                row=p.row,
-                col=p.col,
-                row_span=p.row_span,
-                col_span=p.col_span,
-                kind=p.kind,
-                card_variant_id=p.card_variant_id,
-                insert_asset_id=p.insert_asset_id,
-                spans_gutter=p.spans_gutter,
-                z_order=p.z_order,
-            )
-        )
-    db.commit()
+    write_placements(db, binder, placements, replace=replace)
 
     considered = len(cards)
     if skip_reverse_holos:

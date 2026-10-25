@@ -1,0 +1,24 @@
+# Mirrored pages: an insert panel at the top of each page with cards below, symmetric about the
+# gutter. Scores well on the symmetry term by construction, which makes it a useful control when
+# tuning weights.
+name: "Twin panels"
+description: "Mirrored insert panel per page, eight cards."
+rows: 3
+cols: 3
+requires_side_loading: false
+card_slots: 8
+slots:
+  - {row: 0, col: 0, kind: insert, col_span: 3}
+  - {row: 0, col: 3, kind: insert, col_span: 3}
+  - {row: 1, col: 0, kind: card}
+  - {row: 1, col: 1, kind: hero}
+  - {row: 1, col: 2, kind: card}
+  - {row: 1, col: 3, kind: card}
+  - {row: 1, col: 4, kind: card}
+  - {row: 1, col: 5, kind: card}
+  - {row: 2, col: 1, kind: card}
+  - {row: 2, col: 4, kind: card}
+  - {row: 2, col: 0, kind: empty}
+  - {row: 2, col: 2, kind: empty}
+  - {row: 2, col: 3, kind: empty}
+  - {row: 2, col: 5, kind: empty}

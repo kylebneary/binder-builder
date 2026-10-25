@@ -1,0 +1,22 @@
+# Spec archetype: artist retrospective. A printed banner naming the illustrator runs the full
+# width of the spread, with their cards below it.
+name: "Artist retrospective"
+description: "Full-width banner insert across the top, twelve cards beneath."
+rows: 3
+cols: 3
+requires_side_loading: true
+card_slots: 12
+slots:
+  - {row: 0, col: 0, kind: insert, col_span: 6, spans_gutter: true}
+  - {row: 1, col: 0, kind: card}
+  - {row: 1, col: 1, kind: card}
+  - {row: 1, col: 2, kind: card}
+  - {row: 1, col: 3, kind: card}
+  - {row: 1, col: 4, kind: card}
+  - {row: 1, col: 5, kind: card}
+  - {row: 2, col: 0, kind: card}
+  - {row: 2, col: 1, kind: card}
+  - {row: 2, col: 2, kind: card}
+  - {row: 2, col: 3, kind: card}
+  - {row: 2, col: 4, kind: card}
+  - {row: 2, col: 5, kind: card}

@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from app.binder.export import ExportError
 from app.binder.layout import AutoLayoutMode
+from app.binder.michi import ClusterKey, ScoreWeights
 from app.config import get_settings
 from app.db import SessionLocal
 from app.ingest.cards import ingest_sets_and_cards
@@ -38,6 +39,7 @@ from app.services.collection import get_or_create_default_collection
 from app.services.csv_export import export_collection_csv
 from app.services.csv_import import apply_import, dry_run_import, parse_csv
 from app.services.inserts import InsertError, list_inserts, save_insert
+from app.services.michi import apply_michi_layout, extract_colors
 from app.services.simulation_runs import run_search_and_cache
 from app.sim.optimizer import Objective
 from app.sim.types import CostParams
@@ -802,6 +804,116 @@ def binder_export_png(
     finally:
         db.close()
     console.print(f"Wrote {out}")
+
+
+@binder_app.command("extract-colors")
+def binder_extract_colors(
+    set_code: str | None = typer.Option(None, "--set", help="ptcg_set_id, e.g. sv8. Omit for all."),
+    limit: int | None = typer.Option(None, "--limit", help="Stop after this many cards."),
+    refresh: bool = typer.Option(False, "--refresh", help="Recompute cards that already have one."),
+) -> None:
+    """Cache each card's dominant colour as CIELAB, for colour-themed Michi layouts.
+
+    Downloads art once into the image cache, so a second run over the same set does no network
+    work. Cards whose art will not download or decode are counted and skipped, never guessed.
+    """
+    db = SessionLocal()
+    try:
+        set_id = None
+        if set_code:
+            row = db.execute(
+                select(SetModel).where(SetModel.ptcg_set_id == set_code)
+            ).scalar_one_or_none()
+            if row is None:
+                console.print(f"[red]No set with ptcg_set_id {set_code!r}.[/red]")
+                raise typer.Exit(code=1)
+            set_id = row.id
+        result = extract_colors(db, set_id=set_id, limit=limit, refresh=refresh)
+    finally:
+        db.close()
+    console.print(
+        f"{result.extracted} extracted, {result.already_cached} already cached, "
+        f"{result.skipped_no_image} without usable art, {result.skipped_unreadable} unreadable "
+        f"(of {result.considered} considered)"
+    )
+    if result.skipped_no_image:
+        console.print(
+            "[yellow]Cards without usable art keep a null colour and are grouped as 'misc' by "
+            "colour clustering.[/yellow]"
+        )
+
+
+@binder_app.command("michi")
+def binder_michi(
+    binder_id: int,
+    set_code: str = typer.Option(..., "--set", help="ptcg_set_id, e.g. sv8."),
+    key: str = typer.Option("species", "--key", help="species | artist | colour | evolution"),
+    trials: int = typer.Option(24, "--trials", help="Best-of-N template/assignment trials."),
+    seed: int = typer.Option(0, "--seed", help="Seeded, so a run is reproducible."),
+    w_sym: float = typer.Option(0.30, "--w-symmetry"),
+    w_col: float = typer.Option(0.25, "--w-colour"),
+    w_hero: float = typer.Option(0.20, "--w-hero"),
+    w_fill: float = typer.Option(0.15, "--w-fill"),
+    w_orph: float = typer.Option(0.10, "--w-orphan"),
+) -> None:
+    """Lay a set out Michi-style: cluster, template, assign, score, best of N.
+
+    Replaces the binder's whole layout. Run `bb binder extract-colors --set <id>` first if you
+    want the colour terms to count for anything.
+    """
+    try:
+        cluster_key = ClusterKey(key)
+    except ValueError:
+        valid = ", ".join(k.value for k in ClusterKey)
+        console.print(f"[red]Unknown --key {key!r}. Use one of: {valid}.[/red]")
+        raise typer.Exit(code=1) from None
+
+    db = SessionLocal()
+    try:
+        set_row = db.execute(
+            select(SetModel).where(SetModel.ptcg_set_id == set_code)
+        ).scalar_one_or_none()
+        if set_row is None:
+            console.print(f"[red]No set with ptcg_set_id {set_code!r}.[/red]")
+            raise typer.Exit(code=1)
+        result = apply_michi_layout(
+            db,
+            binder_id,
+            set_row.id,
+            cluster_key=cluster_key,
+            weights=ScoreWeights(w_sym, w_col, w_hero, w_fill, w_orph),
+            trials=trials,
+            seed=seed,
+        )
+    except LookupError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from None
+    except LayoutError as exc:
+        for error in exc.errors:
+            console.print(f"[red]{error}[/red]")
+        raise typer.Exit(code=1) from None
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from None
+    finally:
+        db.close()
+
+    score = result.score
+    console.print(
+        f"{result.placed} placed across {result.groups} spreads "
+        f"({result.unplaced} left over), best of {result.trials} trials"
+    )
+    console.print(f"score {score.total:.3f}")
+    for name in ("symmetry", "colour", "hero", "fill"):
+        value = getattr(score, name)
+        shown = f"{value:.3f}" if value is not None else "not measured"
+        console.print(f"  {name:9s} {shown}")
+    console.print(f"  {'orphan':9s} {score.orphan:.3f} (penalty)")
+    if "colour" in score.unmeasured:
+        console.print(
+            "[yellow]Colour coherence did not count: no card in this set has a dominant colour "
+            "yet. Run `bb binder extract-colors --set " + set_code + "` first.[/yellow]"
+        )
 
 
 if __name__ == "__main__":

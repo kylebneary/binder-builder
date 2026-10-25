@@ -1,0 +1,22 @@
+# Spec archetype: colour-themed. A tall printed band runs down the centre of the spread, crossing
+# the gutter, with the group's cards ranged either side of it by hue.
+name: "Colour wash"
+description: "Full-height gutter-spanning band, six cards on each page."
+rows: 3
+cols: 3
+requires_side_loading: true
+card_slots: 12
+slots:
+  - {row: 0, col: 2, kind: insert, row_span: 3, col_span: 2, spans_gutter: true}
+  - {row: 0, col: 0, kind: card}
+  - {row: 0, col: 1, kind: card}
+  - {row: 1, col: 0, kind: card}
+  - {row: 1, col: 1, kind: card}
+  - {row: 2, col: 0, kind: card}
+  - {row: 2, col: 1, kind: card}
+  - {row: 0, col: 4, kind: card}
+  - {row: 0, col: 5, kind: card}
+  - {row: 1, col: 4, kind: card}
+  - {row: 1, col: 5, kind: card}
+  - {row: 2, col: 4, kind: card}
+  - {row: 2, col: 5, kind: card}
