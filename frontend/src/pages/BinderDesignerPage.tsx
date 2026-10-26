@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import type { ClusterKey, MichiWeights } from "../lib/types";
 import { DEFAULT_MICHI_WEIGHTS } from "../lib/types";
+import { variantLabel } from "../lib/variants";
 import { PlacedCard, parsePocketId } from "../components/BinderPocket";
 import BinderContents from "../components/BinderContents";
 import SpreadView from "../components/SpreadView";
@@ -120,7 +121,7 @@ function goalPoolEntries(cards: CardSearchItem[]): PoolEntry[] {
       detail:
         v.variant === "normal" || v.variant === "holofoil"
           ? card.set_name
-          : `${card.set_name} · ${v.label ?? v.variant.replace(/_/g, " ")}`,
+          : `${card.set_name} · ${variantLabel(v.variant, v.label)}`,
     })),
   );
 }

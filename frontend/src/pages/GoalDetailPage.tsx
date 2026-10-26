@@ -10,7 +10,8 @@ import {
   useResyncGoal,
   useSets,
 } from "../lib/queries";
-import { formatMoney } from "../lib/types";
+import { formatMoney, formatPrice } from "../lib/types";
+import { variantLabel } from "../lib/variants";
 import {
   Button,
   ButtonLink,
@@ -322,11 +323,11 @@ export default function GoalDetailPage() {
               <Td className="font-medium text-ink">{item.card_name}</Td>
               {multiSet && <Td className="text-ink-3">{item.set_name}</Td>}
               <Td className="text-ink-3">
-                {item.variant_label ?? item.variant.replace(/_/g, " ")}
+                {variantLabel(item.variant, item.variant_label)}
               </Td>
               <Td className="text-ink-3">{item.rarity ?? "—"}</Td>
               <Td className="text-right font-mono text-[12px]">
-                {formatMoney(item.market_price)}
+                {formatPrice(item.market_price)}
               </Td>
               <Td className="text-right font-mono text-[12px] font-medium text-ink">
                 {show === "needed" ? item.need_qty : item.owned_qty}

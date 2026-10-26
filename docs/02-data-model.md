@@ -78,6 +78,10 @@ later derives real printings for the card, the placeholder is retired: collectio
 items and binder pockets that pointed at it move to the card's canonical printing, then the row is
 deleted (`app/ingest/placeholders.py`). Migration `e4b7c2a9d1f3` backfilled existing cards.
 
+The UI separates *which printing* from *what it costs*: a printing the feed lists but hasn't
+priced keeps its real name ("1st Edition holo") and shows "Unpriced" where the price goes. Only
+the placeholder, where the printing itself isn't known, is named "Printing unknown".
+
 **Editions (WotC era).** Jungle through Neo Destiny price each card as `1st Edition` / `Unlimited`
 (non-holo) and `1st Edition Holofoil` / `Unlimited Holofoil`, giving `first_edition_*` and
 `unlimited_*` rows. Base Set is the exception: its primary tcgcsv group (604) is only the later,

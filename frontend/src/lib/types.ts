@@ -357,6 +357,12 @@ export function formatMoney(value: string | null): string {
   return n === null ? "—" : `$${n.toFixed(2)}`;
 }
 
+/** A single card's or printing's price: "Unpriced" rather than a dash when the feed has none, so
+ * a known printing with no price reads as such rather than as missing data. */
+export function formatPrice(value: string | null): string {
+  return parseMoney(value) === null ? "Unpriced" : formatMoney(value);
+}
+
 /* ------------------------------------------------------------------- binder */
 
 export interface BinderIn {

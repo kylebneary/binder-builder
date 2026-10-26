@@ -563,6 +563,11 @@ separate printing per Worlds year.
   and laid out in a binder. The price ingest swaps it for the real printing when one appears,
   carrying ownership, goal items and binder pockets across. Migration `e4b7c2a9d1f3` backfills the
   existing 1,911 such cards; card ingest covers new ones. See `docs/02-data-model.md`.
+- **Most of those cards were matcher misses, now fixed.** A stricter name comparison
+  (`name_key`, see `docs/03-data-sources.md`) matched 2,915 more cards with no existing match
+  changed; placeholders fall from 1,911 to 373 on the next `bb ingest prices`. The UI now keeps a
+  known printing's name and says "Unpriced" in the price slot; only a true placeholder reads
+  "Printing unknown".
 - **The printing catalogue is not finished.** Rows still only exist where TCGplayer sells a
   product, and several known gaps remain — tracked in `docs/07-data-backlog.md` §3a. Keep
   building it out there before treating a Grand Master Set as complete.

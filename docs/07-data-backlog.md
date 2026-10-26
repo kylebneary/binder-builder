@@ -162,10 +162,12 @@ Halloween promo bundle product, not something to build a pull-rate profile for.
       `card_variant` row, so Master and Grand Master Set goals are complete. Done so far: base
       subTypes, tagged printings (`data/printing_tags.yaml`), WotC 1st Edition / Unlimited, and
       Base Set Shadowless via an edition group. Known gaps, roughly by size:
-  - [ ] ~1,911 cards with no real printing, mostly the low-confidence name-match review path
-        (the `normalize_name` gaps described above) rather than missing data. They are usable
-        (each has an `unpriced` placeholder, so goals and binders work) but have no price. Fixing
-        the matcher prices them, and the ingest retires each placeholder automatically.
+  - [ ] ~373 cards with no real printing (down from 1,911 once `name_key` fixed the hyphen,
+        accent, `&`, symbol and trailing-number gaps described above). They are usable (each has
+        an `unpriced` placeholder, shown as "Printing unknown") but have no price. Largest
+        groups: `g1` 34, `bw11` 25, `ecard3` 16, `sm5`/`sm8` 15, the trainer kits (unmappable,
+        §1). Remaining patterns include energy abbreviations ("Powerful C Energy", "Unit Energy
+        GRW") and stamped promos. Each matcher fix retires its placeholders automatically.
   - [ ] Printings TCGplayer doesn't sell as a product get no row, because rows are derived from
         the price feed: Champions Festival placement stamps, Base Set's later print runs (the
         "1999-2000" copyright and UK 4th print), 1st Edition stamp variants (thin/thick, "ghost"),

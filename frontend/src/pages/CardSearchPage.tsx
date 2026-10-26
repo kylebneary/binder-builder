@@ -9,7 +9,8 @@ import {
   useSets,
 } from "../lib/queries";
 import type { CardQuery, CardSearchItem, CardSort, VariantOut } from "../lib/types";
-import { formatMoney, parseMoney } from "../lib/types";
+import { formatPrice, parseMoney } from "../lib/types";
+import { variantLabel } from "../lib/variants";
 import {
   Button,
   Callout,
@@ -186,29 +187,6 @@ function MultiPick({
   );
 }
 
-// Collector-facing names for the variant enum. Anything new from the price feed falls back to
-// its enum value with spaces.
-const VARIANT_LABELS: Record<string, string> = {
-  normal: "Normal",
-  holofoil: "Holo",
-  reverse_holofoil: "Reverse holo",
-  first_edition_normal: "1st Edition",
-  first_edition_holofoil: "1st Edition holo",
-  unlimited_normal: "Unlimited",
-  unlimited_holofoil: "Unlimited holo",
-  shadowless_normal: "Shadowless",
-  shadowless_holofoil: "Shadowless holo",
-  poke_ball_holo: "Poké Ball holo",
-  master_ball_holo: "Master Ball holo",
-  unpriced: "Unpriced",
-};
-
-/** Base printings are named here; tagged printings carry their label from the server
- * (data/printing_tags.yaml). */
-function variantLabel(v: string, label?: string | null) {
-  return label ?? VARIANT_LABELS[v] ?? v.replace(/_/g, " ");
-}
-
 function cardPrice(card: CardSearchItem): string | null {
   let best: number | null = null;
   let raw: string | null = null;
@@ -284,7 +262,7 @@ function ResultTile({
         </span>
         <span className="flex justify-between gap-1 text-[10.5px]">
           <span className="truncate text-ink-3">{card.rarity ?? "—"}</span>
-          <span className="font-mono text-ink-2">{formatMoney(cardPrice(card))}</span>
+          <span className="font-mono text-ink-2">{formatPrice(cardPrice(card))}</span>
         </span>
       </div>
       {showVariants && card.variants.length > 0 && (
@@ -298,7 +276,7 @@ function ResultTile({
               className={`rounded px-1.5 py-[2px] font-mono text-[9.5px] ${
                 selected.has(v.id) ? "bg-accent text-accent-fg" : "bg-inset text-ink-3 hover:text-ink"
               } ${v.is_special ? "border border-dashed border-warn-line" : ""}`}
-              title={`${variantLabel(v.variant, v.label)} · ${formatMoney(v.market_price)}${
+              title={`${variantLabel(v.variant, v.label)} · ${formatPrice(v.market_price)}${
                 v.is_special ? " · stamp/promo (Grand Master Set)" : ""
               }${v.owned_quantity > 0 ? " · owned" : ""}`}
             >

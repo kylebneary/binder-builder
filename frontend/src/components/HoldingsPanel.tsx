@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { HoldingGroupKey, HoldingOut } from "../lib/types";
-import { formatMoney, parseMoney } from "../lib/types";
+import { formatMoney, formatPrice, parseMoney } from "../lib/types";
+import { variantLabel } from "../lib/variants";
 import { CardTileBase } from "./CardTile";
 import { Chip, Input, Segmented, Select, Table, Tag, Td, Th, Tr } from "./ui";
 
@@ -140,7 +141,7 @@ function HoldingsGrid({ holdings }: { holdings: HoldingOut[] }) {
           imageSmall={h.image_small}
           price={h.market_value}
           owned
-          variantLabel={h.variant === "normal" ? undefined : h.variant.replace(/_/g, " ")}
+          variantLabel={h.variant === "normal" ? undefined : variantLabel(h.variant)}
           quantity={h.quantity}
           condition={h.condition}
           location={
@@ -431,14 +432,14 @@ export default function HoldingsPanel({
               <Td>
                 <div className="flex items-center gap-2">
                   <span className="text-ink">{h.name}</span>
-                  {h.variant !== "normal" && <Tag tone="neutral">{h.variant.replace(/_/g, " ")}</Tag>}
+                  {h.variant !== "normal" && <Tag tone="neutral">{variantLabel(h.variant)}</Tag>}
                   {h.is_graded && <Tag tone="accent">{h.grade ?? "graded"}</Tag>}
                 </div>
               </Td>
               <Td className="text-[12px] text-ink-3">{h.rarity ?? "—"}</Td>
               <Td className="font-mono text-[11.5px]">{h.condition}</Td>
               <Td className="font-mono text-[11.5px]">{h.quantity}</Td>
-              <Td className="text-right font-mono text-[11.5px]">{formatMoney(h.market_value)}</Td>
+              <Td className="text-right font-mono text-[11.5px]">{formatPrice(h.market_value)}</Td>
               {/* nowrap: a slot label is meaningless broken across lines. Table scrolls. */}
               <Td className="whitespace-nowrap font-mono text-[11.5px]">
                 {h.storage_location ? (

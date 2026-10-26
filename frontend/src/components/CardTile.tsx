@@ -1,5 +1,5 @@
 import type { CardOut } from "../lib/types";
-import { formatMoney } from "../lib/types";
+import { formatPrice } from "../lib/types";
 
 /**
  * A single pocket in a card grid. Owned cards sit on the accent-tinted surface with a mono
@@ -89,7 +89,7 @@ export function CardTileBase({
         <div className="truncate text-[10.5px] text-ink-3" title={variantLabel ?? rarity ?? ""}>
           {variantLabel ?? rarity ?? "—"}
         </div>
-        <div className="font-mono text-[10.5px] font-medium text-ink-3">{formatMoney(price)}</div>
+        <div className="font-mono text-[10.5px] font-medium text-ink-3">{formatPrice(price)}</div>
         {location !== undefined && (
           <div className="truncate font-mono text-[10px] text-ink-4" title={location ?? ""}>
             {location ?? "—"}
