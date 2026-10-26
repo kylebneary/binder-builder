@@ -40,9 +40,17 @@ class ProductType(StrEnum):
 
 
 class GoalType(StrEnum):
+    """How a goal's `goal_item` rows are decided.
+
+    SET / MASTER_SET / FILTER are rules, re-materialised on resync, so a filter goal like "every
+    Pikachu" picks up cards from newly ingested sets. CUSTOM has no rule: its items *are* the
+    goal, edited one by one, and resync leaves them alone.
+    """
+
     SET = "set"
     MASTER_SET = "master_set"
     FILTER = "filter"
+    CUSTOM = "custom"
 
 
 class Confidence(StrEnum):

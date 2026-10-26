@@ -148,7 +148,7 @@ is what keeps two implementations of one rule honest.
 id, collection_id, sealed_product_id, quantity, acquired_price, acquired_on, is_opened.
 
 ### `goal` / `goal_item`
-`goal`: id, name, goal_type (`set`, `master_set`, `filter`), set_id null, filter_json,
+`goal`: id, name, goal_type (`set`, `master_set`, `filter`, `custom`), set_id null, filter_json,
 target_condition, created_at.
 
 `goal_item`: goal_id, card_variant_id, required_qty (default 1).
@@ -156,6 +156,34 @@ target_condition, created_at.
 Materialise `goal_item` when the goal is created or the set is updated. Do not evaluate a filter on
 every read — the optimizer hits this table hundreds of thousands of times per simulation and it
 must be a plain join.
+
+The four types differ only in where `goal_item` comes from:
+
+| Type | Items come from | Resync |
+|---|---|---|
+| `set` | canonical variants of `set_id` | re-derived |
+| `master_set` | every variant of `set_id` | re-derived |
+| `filter` | `services/cards.py` run over `filter_json` | re-derived, so "every Pikachu" picks up new sets |
+| `custom` | hand edits (`POST /goals/{id}/items`) | **no-op**: the rows *are* the goal |
+
+`filter_json` keys are `CardQuery` field names (`pokedex_numbers`, `artists`, `types`, `subtypes`,
+`set_ids`, `rarities`, `variant_scope`, price and year bounds, ...). The singular keys older goals were
+saved with (`set_id`, `rarity`, `artist`, `supertype`) are still read. `owned` is never stored: a goal
+whose membership depended on ownership would shrink with every purchase and could never show
+progress.
+
+Only `custom` goals accept hand edits. A rule-built goal is converted first (`convert-to-custom`),
+which freezes its current items. Editing it in place would be silently undone by the next resync.
+
+For `filter` and `custom` goals `set_id` is **derived**: it is set when every item belongs to one
+set, otherwise null. The optimizer prices sealed product, which is per set, so a null `set_id` means
+the goal gets a singles cost and no optimizer run.
+
+**Matching JSON list columns.** `card.types`, `subtypes` and `national_pokedex_numbers` are JSON
+lists, and "contains X" has no spelling shared by SQLite (`json_each`) and Postgres (`@>`). The search
+matches the JSON *text* instead, with element boundaries (`[25]`, `[25,`, ` 25,`, ` 25]`), which is
+exact because these columns are always written as `json.dumps` output and Postgres' `JSON` type keeps
+text verbatim. Switching the columns to `JSONB` would break that and need a dialect-specific path.
 
 ### Pull-rate model
 `pull_rate_profile`: id, set_id, name, cards_per_pack, source_urls (JSON), sample_packs int null,

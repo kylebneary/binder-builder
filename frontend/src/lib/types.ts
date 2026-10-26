@@ -89,12 +89,114 @@ export interface PortfolioValuePointOut {
   total_market_value: string;
 }
 
+/* ------------------------------------------------------------- card search */
+
+/** Mirrors CardQueryIn. Empty lists and null mean "no constraint". */
+export interface CardQuery {
+  q?: string | null;
+  set_ids?: number[];
+  series?: string[];
+  rarities?: string[];
+  supertypes?: string[];
+  types?: string[];
+  subtypes?: string[];
+  artists?: string[];
+  pokedex_numbers?: number[];
+  variants?: string[];
+  variant_scope?: "canonical" | "all";
+  owned?: "owned" | "missing" | null;
+  min_price?: string | null;
+  max_price?: string | null;
+  year_from?: number | null;
+  year_to?: number | null;
+  goal_id?: number | null;
+}
+
+export type CardSort = "newest" | "oldest" | "name" | "price";
+
+export interface CardSearchIn extends CardQuery {
+  sort?: CardSort;
+  offset?: number;
+  limit?: number;
+}
+
+export interface CardSearchItem {
+  id: number;
+  ptcg_card_id: string;
+  number: string;
+  number_sort: number;
+  name: string;
+  supertype: string | null;
+  rarity: string | null;
+  artist: string | null;
+  types: string[];
+  subtypes: string[];
+  national_pokedex_numbers: number[];
+  image_small: string | null;
+  image_large: string | null;
+  set_id: number;
+  ptcg_set_id: string;
+  set_name: string;
+  series: string | null;
+  release_date: string | null;
+  /** Only the variants that matched the query. */
+  variants: VariantOut[];
+  is_owned: boolean;
+}
+
+export interface CardSearchOut {
+  total: number;
+  offset: number;
+  limit: number;
+  cards: CardSearchItem[];
+  /** Matching cards with no priced variant -- they cannot go in a goal or a binder yet. */
+  unplaceable_count: number;
+}
+
+export interface FacetValue {
+  value: string;
+  count: number;
+}
+
+export interface SpeciesFacet {
+  pokedex_number: number;
+  name: string;
+  count: number;
+}
+
+export interface CardFacetsOut {
+  rarities: FacetValue[];
+  supertypes: FacetValue[];
+  types: FacetValue[];
+  subtypes: FacetValue[];
+  artists: FacetValue[];
+  series: FacetValue[];
+  variants: FacetValue[];
+  species: SpeciesFacet[];
+}
+
+export type GoalType = "set" | "master_set" | "filter" | "custom";
+
 export interface GoalIn {
   name: string;
-  goal_type: string;
+  goal_type: GoalType;
   set_id?: number | null;
   filter_json?: Record<string, unknown> | null;
   target_condition?: string;
+  card_variant_ids?: number[];
+  query?: CardQuery | null;
+}
+
+export interface GoalItemsEditIn {
+  add?: number[];
+  remove?: number[];
+  add_query?: CardQuery | null;
+}
+
+export interface GoalItemsEditOut {
+  added: number;
+  removed: number;
+  item_count: number;
 }
 
 export interface GoalOut {
@@ -116,6 +218,9 @@ export interface NeedItemOut {
   owned_qty: number;
   need_qty: number;
   market_price: string | null;
+  set_name: string;
+  ptcg_set_id: string;
+  image_small: string | null;
 }
 
 export interface SinglesCostOut {
@@ -133,6 +238,7 @@ export interface GoalDetailOut {
   goal_type: string;
   set_id: number | null;
   target_condition: string;
+  filter_json: Record<string, unknown> | null;
   items: NeedItemOut[];
   cost: SinglesCostOut;
   unpriced_count: number;
@@ -320,8 +426,10 @@ export interface BinderLayoutOut extends BinderOut {
   not_owned_count: number;
 }
 
+/** Exactly one of set_id / goal_id. */
 export interface AutoLayoutIn {
-  set_id: number;
+  set_id?: number;
+  goal_id?: number;
   mode?: "set_order" | "rarity_tiered";
   canonical_only?: boolean;
   skip_reverse_holos?: boolean;
@@ -365,8 +473,10 @@ export const DEFAULT_MICHI_WEIGHTS: MichiWeights = {
   orphan: 0.1,
 };
 
+/** Exactly one of set_id / goal_id. */
 export interface MichiLayoutIn {
-  set_id: number;
+  set_id?: number;
+  goal_id?: number;
   cluster_key: ClusterKey;
   trials?: number;
   seed?: number;

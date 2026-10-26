@@ -20,8 +20,8 @@ from app.binder.michi import (
     plans_to_placements,
 )
 from app.binder.templates import default_templates
-from app.models import Binder, Card, CardVariant, Set
-from app.services.binder import write_placements
+from app.models import Binder, Card, Set
+from app.services.binder import layout_source, write_placements
 from app.services.binder_export import cached_card_art
 from app.services.prices import get_current_prices
 
@@ -88,23 +88,25 @@ def extract_colors(
     )
 
 
-def load_michi_cards(db: Session, set_id: int, *, canonical_only: bool = True) -> list[MichiCard]:
-    """The pool for a Michi layout: one entry per placeable variant, with everything the
-    clustering and scoring need attached."""
-    stmt = (
-        select(CardVariant, Card)
-        .join(Card, CardVariant.card_id == Card.id)
-        .where(Card.set_id == set_id)
-    )
-    if canonical_only:
-        stmt = stmt.where(CardVariant.is_canonical.is_(True))
-    rows = db.execute(stmt).all()
+def load_michi_cards(
+    db: Session,
+    set_id: int | None = None,
+    *,
+    goal_id: int | None = None,
+    canonical_only: bool = True,
+) -> list[MichiCard]:
+    """The pool for a Michi layout: one entry per placeable variant from a set or a goal, with
+    everything the clustering and scoring need attached."""
+    source = layout_source(db, set_id=set_id, goal_id=goal_id, canonical_only=canonical_only)
+    rows = [(r.variant, r.card, r.set_rank) for r in source]
 
-    product_ids = sorted({v.tcgplayer_product_id for v, _ in rows if v.tcgplayer_product_id})
+    product_ids = sorted({v.tcgplayer_product_id for v, _, _ in rows if v.tcgplayer_product_id})
     prices = get_current_prices(db, product_ids)
 
+    # number_sort only orders cards within a set; a multi-set goal needs the set first, or every
+    # set's #001 sorts together. Scaled well past any real card number.
     cards: list[MichiCard] = []
-    for variant, card in rows:
+    for variant, card, set_rank in rows:
         market = None
         if variant.tcgplayer_product_id and variant.tcgplayer_sub_type_name:
             current = prices.get((variant.tcgplayer_product_id, variant.tcgplayer_sub_type_name))
@@ -121,7 +123,7 @@ def load_michi_cards(db: Session, set_id: int, *, canonical_only: bool = True) -
                 card_variant_id=variant.id,
                 card_id=card.id,
                 name=card.name,
-                number_sort=card.number_sort,
+                number_sort=set_rank * 100_000 + card.number_sort,
                 rarity=card.rarity,
                 artist=card.artist,
                 pokedex_number=dex,
@@ -135,8 +137,9 @@ def load_michi_cards(db: Session, set_id: int, *, canonical_only: bool = True) -
 def apply_michi_layout(
     db: Session,
     binder_id: int,
-    set_id: int,
+    set_id: int | None = None,
     *,
+    goal_id: int | None = None,
     cluster_key: ClusterKey = ClusterKey.SPECIES,
     weights: ScoreWeights | None = None,
     trials: int = 24,
@@ -151,10 +154,10 @@ def apply_michi_layout(
     binder = db.get(Binder, binder_id)
     if binder is None:
         raise LookupError(f"Binder {binder_id} not found")
-    if db.get(Set, set_id) is None:
+    if set_id is not None and db.get(Set, set_id) is None:
         raise LookupError(f"Set {set_id} not found")
 
-    cards = load_michi_cards(db, set_id, canonical_only=canonical_only)
+    cards = load_michi_cards(db, set_id, goal_id=goal_id, canonical_only=canonical_only)
     result = auto_layout_michi(
         cards,
         list(default_templates()),

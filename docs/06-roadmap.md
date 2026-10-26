@@ -23,6 +23,7 @@ Never commit to `main`. One branch per slice, merged when its exit criteria are 
 | `feat/phase-3-binder-core` | Tasks 3.1–3.3, 3.5, 3.11–3.13 |
 | `feat/phase-3-binder-export` | Tasks 3.4, 3.9, 3.10 |
 | `feat/phase-3-binder-michi` | Tasks 3.6–3.8 |
+| `feat/phase-4-custom-goals` | Task 4.6 |
 
 Phase 1 is three branches rather than one on purpose. Set mapping (1.5–1.6) is research-shaped
 and will churn through many revisions; keeping it separate lets the schema and ingest work in
@@ -152,6 +153,7 @@ math per `docs/04-optimizer-spec.md`), `ingest/pullrates.py` (Pydantic structura
 DB-dependent rarity-existence check), and `bb goal create` / `bb goal need-list` / `bb sync
 pullrates` CLI commands. API at `/api/v1/goals`; UI at `/goals` and `/goals/:goalId` (set/
 master_set creation only -- a filter-builder UI is deferred, see `services/goals.py`'s docstring).
+*(Superseded by 4.6: the card search is the filter builder, and `custom` goals were added.)*
 Verified against the real ingested DB: `sv8` master-set goal → 411 needed cards, $1338.92 total
 (35 consolidated orders); plain `set` goal → 249 cards, $1177.47. Both confirmed rendering
 correctly in a real browser (Playwright), not just via the API. `bb sync pullrates` correctly
@@ -502,6 +504,43 @@ configured (the latter still unused). The Phase 1/2 design system is what the bi
 - [ ] 4.3 Multi-goal portfolio view.
 - [ ] 4.4 Japanese set support (TCGdex; different pack structures and published box odds).
 - [ ] 4.5 Community pull-rate contribution: log your own pack openings and update profile posteriors.
+- [x] 4.6 Card search, custom goals, and laying out a goal in a binder.
+
+**4.6 shipped (2026-10-25), branch `feat/phase-4-custom-goals`.** Goals no longer have to be a
+set. Owner request: any list of cards, built by searching on any attribute, with "every card of a
+Pokémon" / "every card by an artist" as templates, and laid out in the binder designer.
+
+- **One query builder, three callers.** `services/cards.py` (`CardQuery`) backs the search page
+  (`POST /cards/search`), `filter` goals (materialised through `variant_ids`), and the binder pool
+  for a goal. That is what guarantees a live goal holds exactly what the search showed. Filters:
+  name, set, era, rarity, card/energy/sub-type, illustrator, Pokédex number, printing, owned/missing,
+  price range, release years. `GET /cards/facets` lists every value with counts.
+- **"A Pokémon" means a Pokédex number, not a name.** "Mew" matches Mewtwo by name. Species names
+  are derived from single-species card names (shortest wins, so dex 25 is "Pikachu", not "Pikachu
+  ex"). The catalogue has no species table, so this is a heuristic; every name it produces is a real
+  card name. Tag-team cards match each of their species.
+- **`custom` goal type.** Its `goal_item` rows are the goal; resync leaves them alone. Rule-built
+  goals refuse hand edits (409) and are frozen with `convert-to-custom` first. See the table in
+  `docs/02-data-model.md`.
+- **Search matches variants, displays cards.** The unpriced chase cards (no `card_variant`, so
+  nothing to put in a goal or pocket) are counted as `unplaceable_count` and shown, not silently
+  dropped: 52 of the catalogue's 177 Pikachu cards.
+- **Binder.** `auto-layout` and `michi-layout` take `goal_id` as an alternative to `set_id`
+  (exactly one; 422 otherwise). Shared loader `services/binder.layout_source`; multi-set pools run
+  set by set in release order (`LayoutCard.set_rank`). The designer's pool has a set/goal toggle,
+  and a goal's detail page hands off to it with `/binders/:id?goal=:goalId`.
+- **Optimizer.** Unchanged, and still per set. `filter` and `custom` goals derive `set_id` when all
+  their cards share one set, so "Charizards in Obsidian Flames" can still be simulated; a multi-set
+  goal shows its singles cost and disables "Run optimizer".
+- **CLI.** `bb cards search <filters> [--save-goal NAME [--live]] [--add-to-goal ID]`,
+  `bb goal create --type custom`, `bb goal add-cards|remove-cards|convert|resync`,
+  `bb binder auto-layout|michi --goal ID`.
+
+50 new tests (`test_service_cards.py`, `test_api_cards.py`, and additions to the goal and binder
+suites over a shared two-era fixture, `conftest.seed_catalogue`). Full suite: 407 passing. Checked
+against the real 20,479-card DB via the CLI, and end to end in headless Chromium against a *copy* of
+it: search → pick → save custom goal → add/remove → illustrator template (516-card live goal) →
+auto-layout and Michi from a goal. No console errors except a card image pokemontcg.io itself 404s.
 
 ---
 

@@ -2,11 +2,12 @@
 
 import json
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 
 import typer
 from rich.console import Console
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.binder.export import ExportError
 from app.binder.layout import AutoLayoutMode
@@ -25,7 +26,7 @@ from app.ingest.sealed_map import (
 )
 from app.ingest.set_mapping import load_set_map, sync_set_map_to_db
 from app.ingest.tcgcsv import TcgCsvPriceSource
-from app.models import SealedProduct
+from app.models import GoalItem, SealedProduct
 from app.models import Set as SetModel
 from app.models.enums import GoalType
 from app.services import binder as binder_service
@@ -35,9 +36,11 @@ from app.services.binder_export import (
     export_binder_inserts_pdf,
     export_binder_spread_png,
 )
+from app.services.cards import CardQuery, card_facets, search_cards, variant_ids
 from app.services.collection import get_or_create_default_collection
 from app.services.csv_export import export_collection_csv
 from app.services.csv_import import apply_import, dry_run_import, parse_csv
+from app.services.goals import GoalEditError
 from app.services.inserts import InsertError, list_inserts, save_insert
 from app.services.michi import apply_michi_layout, extract_colors
 from app.services.simulation_runs import run_search_and_cache
@@ -52,6 +55,7 @@ import_app = typer.Typer(help="Import collection data from other tools")
 export_app = typer.Typer(help="Export collection data")
 goal_app = typer.Typer(help="Completion goals")
 binder_app = typer.Typer(help="Binder designer")
+cards_app = typer.Typer(help="Search the card catalogue")
 app.add_typer(ingest_app, name="ingest")
 app.add_typer(sim_app, name="sim")
 app.add_typer(sync_app, name="sync")
@@ -59,13 +63,14 @@ app.add_typer(import_app, name="import")
 app.add_typer(export_app, name="export")
 app.add_typer(goal_app, name="goal")
 app.add_typer(binder_app, name="binder")
+app.add_typer(cards_app, name="cards")
 
 console = Console()
 
 
 @ingest_app.command("cards")
 def ingest_cards(
-    set_id: list[str] | None = typer.Option(  # noqa: B008 -- required Typer pattern
+    set_id: list[str] | None = typer.Option(
         None, "--set", help="ptcg_set_id, e.g. sv8. Repeatable."
     ),
     all_sets: bool = typer.Option(False, "--all", help="Ingest every set from pokemontcg.io."),
@@ -113,10 +118,10 @@ def ingest_cards(
 
 @ingest_app.command("prices")
 def ingest_prices(
-    group: list[int] | None = typer.Option(  # noqa: B008 -- required Typer pattern
+    group: list[int] | None = typer.Option(
         None, "--group", help="tcgcsv groupId. Repeatable."
     ),
-    set_id: list[str] | None = typer.Option(  # noqa: B008 -- required Typer pattern
+    set_id: list[str] | None = typer.Option(
         None,
         "--set",
         help=(
@@ -329,27 +334,188 @@ def export_csv(path: str) -> None:
     console.print(f"Wrote {path}")
 
 
+@cards_app.command("search")
+def cards_search(
+    name: str | None = typer.Option(None, "--name", help="Substring of the card name."),
+    sets: list[str] = typer.Option([], "--set", help="ptcg_set_id; repeat for several."),
+    series: list[str] = typer.Option([], "--series", help="e.g. 'Scarlet & Violet'."),
+    rarities: list[str] = typer.Option([], "--rarity", help="Exact rarity; repeatable."),
+    supertypes: list[str] = typer.Option([], "--supertype", help="Pokémon | Trainer | Energy"),
+    types: list[str] = typer.Option([], "--type", help="Energy type, e.g. Fire; repeatable."),
+    subtypes: list[str] = typer.Option([], "--subtype", help="e.g. ex, VMAX, Supporter."),
+    artists: list[str] = typer.Option([], "--artist", help="Exact illustrator name."),
+    pokemon: list[str] = typer.Option(
+        [], "--pokemon", help="Species name, matched by Pokédex number: Pikachu, not 'Pikachu ex'."
+    ),
+    dex: list[int] = typer.Option([], "--dex", help="National Pokédex number; repeatable."),
+    variants: list[str] = typer.Option([], "--variant", help="e.g. reverse_holofoil."),
+    all_printings: bool = typer.Option(
+        False, "--all-printings", help="Every printing, not one per card (master-set style)."
+    ),
+    owned: str | None = typer.Option(None, "--owned", help="owned | missing"),
+    min_price: str | None = typer.Option(None, "--min-price"),
+    max_price: str | None = typer.Option(None, "--max-price"),
+    year_from: int | None = typer.Option(None, "--year-from"),
+    year_to: int | None = typer.Option(None, "--year-to"),
+    sort: str = typer.Option("newest", "--sort", help="newest | oldest | name | price"),
+    limit: int = typer.Option(50, "--limit", help="Cards to print."),
+    save_goal: str | None = typer.Option(
+        None, "--save-goal", help="Save the matches as a new goal with this name."
+    ),
+    live: bool = typer.Option(
+        False,
+        "--live",
+        help="With --save-goal: store the filter itself, so the goal picks up newly ingested "
+        "cards. Default is a fixed list you can then edit card by card.",
+    ),
+    add_to_goal: int | None = typer.Option(
+        None, "--add-to-goal", help="Add every match to this custom goal."
+    ),
+) -> None:
+    """Search the whole catalogue by any combination of attributes."""
+    if owned not in (None, "owned", "missing"):
+        console.print("[red]--owned takes 'owned' or 'missing'.[/red]")
+        raise typer.Exit(code=1)
+    if sort not in ("newest", "oldest", "name", "price"):
+        console.print("[red]--sort takes newest, oldest, name or price.[/red]")
+        raise typer.Exit(code=1)
+
+    db = SessionLocal()
+    try:
+        set_ids: list[int] = []
+        for code in sets:
+            row = db.execute(
+                select(SetModel).where(SetModel.ptcg_set_id == code)
+            ).scalar_one_or_none()
+            if row is None:
+                console.print(f"[red]No set with ptcg_set_id {code!r}.[/red]")
+                raise typer.Exit(code=1)
+            set_ids.append(row.id)
+
+        dex_numbers = list(dex)
+        if pokemon:
+            by_name = {s.name.lower(): s.pokedex_number for s in card_facets(db).species}
+            for species in pokemon:
+                number = by_name.get(species.lower())
+                if number is None:
+                    console.print(
+                        f"[red]No species named {species!r}. Use the bare species name "
+                        "(Charizard, not Charizard ex), or --name for a substring.[/red]"
+                    )
+                    raise typer.Exit(code=1)
+                dex_numbers.append(number)
+
+        query = CardQuery(
+            q=name,
+            set_ids=set_ids,
+            series=series,
+            rarities=rarities,
+            supertypes=supertypes,
+            types=types,
+            subtypes=subtypes,
+            artists=artists,
+            pokedex_numbers=dex_numbers,
+            variants=variants,
+            variant_scope="all" if all_printings else "canonical",
+            owned=owned,  # type: ignore[arg-type]
+            min_price=Decimal(min_price) if min_price else None,
+            max_price=Decimal(max_price) if max_price else None,
+            year_from=year_from,
+            year_to=year_to,
+        )
+        collection = get_or_create_default_collection(db)
+        result = search_cards(
+            db, query, collection_id=collection.id, sort=sort, limit=limit  # type: ignore[arg-type]
+        )
+        for card in result.cards:
+            prices = [v.market_price for v in card.variants if v.market_price is not None]
+            price = f"${max(prices)}" if prices else "no price"
+            mark = "[green]owned[/green]" if card.is_owned else ""
+            console.print(
+                f"  {card.ptcg_set_id:>10} {card.number:>6}  {card.name} "
+                f"({card.rarity or '-'}) -- {price} {mark}"
+            )
+        console.print(f"{result.total} matching cards (showing {len(result.cards)}).")
+        if result.unplaceable_count:
+            console.print(
+                f"[yellow]{result.unplaceable_count} more match but have no priced variant, so "
+                "they cannot go in a goal or a binder yet.[/yellow]"
+            )
+
+        if save_goal:
+            try:
+                if live:
+                    goal = goals_service.create_goal(
+                        db, save_goal, GoalType.FILTER, filter_json=query.to_goal_filter()
+                    )
+                else:
+                    ids = variant_ids(db, query, collection_id=collection.id)
+                    goal = goals_service.create_goal(
+                        db, save_goal, GoalType.CUSTOM, card_variant_ids=ids
+                    )
+            except GoalEditError as exc:
+                console.print(f"[red]{exc}[/red]")
+                raise typer.Exit(code=1) from None
+            console.print(f"Created goal {goal.id}: {goal.name!r} ({goal.goal_type})")
+        if add_to_goal is not None:
+            ids = variant_ids(db, query, collection_id=collection.id)
+            try:
+                edit = goals_service.edit_goal_items(db, add_to_goal, add=ids)
+            except GoalEditError as exc:
+                console.print(f"[red]{exc}[/red]")
+                raise typer.Exit(code=1) from None
+            if edit is None:
+                console.print(f"[red]No goal with id {add_to_goal}.[/red]")
+                raise typer.Exit(code=1)
+            console.print(
+                f"Added {edit.added} to goal {add_to_goal}; it now holds {edit.item_count}."
+            )
+    finally:
+        db.close()
+
+
 @goal_app.command("create")
 def goal_create(
     name: str = typer.Option(..., "--name", help="Human-readable goal name."),
-    goal_type: str = typer.Option("set", "--type", help="set | master_set"),
-    set_id: str = typer.Option(..., "--set", help="ptcg_set_id, e.g. sv8."),
+    goal_type: str = typer.Option("set", "--type", help="set | master_set | custom"),
+    set_id: str | None = typer.Option(None, "--set", help="ptcg_set_id, e.g. sv8."),
+    start_with: list[int] = typer.Option(
+        [], "--variant", help="Custom goals: a card_variant id to start with; repeatable."
+    ),
 ) -> None:
-    """Create a completion goal and materialise its need list."""
+    """Create a completion goal and materialise its need list.
+
+    For filter goals ("every Pikachu", "every card by an artist") use
+    `bb cards search ... --save-goal NAME --live`, which takes every search filter.
+    """
     try:
         parsed_type = GoalType(goal_type)
     except ValueError:
-        console.print(f"[red]Unknown goal type {goal_type!r} -- use 'set' or 'master_set'.[/red]")
+        console.print(f"[red]Unknown goal type {goal_type!r}.[/red]")
         raise typer.Exit(code=1) from None
-    if parsed_type not in (GoalType.SET, GoalType.MASTER_SET):
+    if parsed_type == GoalType.FILTER:
         console.print(
-            "[red]bb goal create only supports 'set' or 'master_set' -- "
-            "use the API for 'filter' goals.[/red]"
+            "[red]Create filter goals with `bb cards search <filters> --save-goal NAME --live`."
+            "[/red]"
         )
         raise typer.Exit(code=1)
 
     db = SessionLocal()
     try:
+        if parsed_type == GoalType.CUSTOM:
+            try:
+                goal = goals_service.create_goal(
+                    db, name=name, goal_type=parsed_type, card_variant_ids=start_with
+                )
+            except GoalEditError as exc:
+                console.print(f"[red]{exc}[/red]")
+                raise typer.Exit(code=1) from None
+            console.print(f"Created goal {goal.id}: {goal.name!r} ({goal.goal_type})")
+            return
+
+        if set_id is None:
+            console.print("[red]Set goals need --set.[/red]")
+            raise typer.Exit(code=1)
         set_row = db.execute(
             select(SetModel).where(SetModel.ptcg_set_id == set_id)
         ).scalar_one_or_none()
@@ -363,6 +529,72 @@ def goal_create(
         console.print(f"Created goal {goal.id}: {goal.name!r} ({goal.goal_type})")
     finally:
         db.close()
+
+
+def _edit_goal(goal_id: int, add: list[int], remove: list[int]) -> None:
+    db = SessionLocal()
+    try:
+        edit = goals_service.edit_goal_items(db, goal_id, add=add, remove=remove)
+    except GoalEditError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from None
+    finally:
+        db.close()
+    if edit is None:
+        console.print(f"[red]No goal with id {goal_id}.[/red]")
+        raise typer.Exit(code=1)
+    console.print(
+        f"Added {edit.added}, removed {edit.removed}; goal {goal_id} now holds {edit.item_count}."
+    )
+
+
+@goal_app.command("add-cards")
+def goal_add_cards(
+    goal_id: int,
+    variants: list[int] = typer.Option(..., "--variant", help="card_variant id; repeatable."),
+) -> None:
+    """Add cards to a custom goal. `bb cards search ... --add-to-goal ID` adds by filter."""
+    _edit_goal(goal_id, variants, [])
+
+
+@goal_app.command("remove-cards")
+def goal_remove_cards(
+    goal_id: int,
+    variants: list[int] = typer.Option(..., "--variant", help="card_variant id; repeatable."),
+) -> None:
+    """Remove cards from a custom goal."""
+    _edit_goal(goal_id, [], variants)
+
+
+@goal_app.command("convert")
+def goal_convert(goal_id: int) -> None:
+    """Freeze a set or filter goal into a custom goal, so its cards can be edited by hand."""
+    db = SessionLocal()
+    try:
+        goal = goals_service.convert_to_custom(db, goal_id)
+    finally:
+        db.close()
+    if goal is None:
+        console.print(f"[red]No goal with id {goal_id}.[/red]")
+        raise typer.Exit(code=1)
+    console.print(f"Goal {goal_id} is now a custom goal.")
+
+
+@goal_app.command("resync")
+def goal_resync(goal_id: int) -> None:
+    """Re-run a set or filter goal's rule, e.g. after ingesting a new set."""
+    db = SessionLocal()
+    try:
+        goal = goals_service.resync_goal(db, goal_id)
+        count = db.execute(
+            select(func.count(GoalItem.id)).where(GoalItem.goal_id == goal_id)
+        ).scalar_one()
+    finally:
+        db.close()
+    if goal is None:
+        console.print(f"[red]No goal with id {goal_id}.[/red]")
+        raise typer.Exit(code=1)
+    console.print(f"Goal {goal_id} ({goal.goal_type}) holds {count} cards.")
 
 
 @goal_app.command("need-list")
@@ -541,10 +773,29 @@ def binder_list() -> None:
         console.print(f"  {b.id}: {b.name!r} -- {b.rows}x{b.cols}, {b.pages} pages")
 
 
+def _layout_source_set(db, set_code: str | None, goal_id: int | None) -> int | None:
+    """Resolve the --set / --goal pair the layout commands share. Exactly one must be given;
+    returns the set's row id, or None when laying out a goal."""
+    if (set_code is None) == (goal_id is None):
+        console.print("[red]Give exactly one of --set or --goal.[/red]")
+        raise typer.Exit(code=1)
+    if set_code is None:
+        return None
+    row = db.execute(select(SetModel).where(SetModel.ptcg_set_id == set_code)).scalar_one_or_none()
+    if row is None:
+        console.print(
+            f"[red]No set with ptcg_set_id={set_code!r} -- "
+            f"run `bb ingest cards --set {set_code}` first.[/red]"
+        )
+        raise typer.Exit(code=1)
+    return row.id
+
+
 @binder_app.command("auto-layout")
 def binder_auto_layout(
     binder_id: int,
-    set_id: str = typer.Option(..., "--set", help="ptcg_set_id, e.g. sv8."),
+    set_id: str | None = typer.Option(None, "--set", help="ptcg_set_id, e.g. sv8."),
+    goal_id: int | None = typer.Option(None, "--goal", help="Lay out exactly this goal's cards."),
     mode: str = typer.Option("set-order", "--mode", help="set-order | rarity-tiered"),
     master: bool = typer.Option(
         False, "--master", help="Place every printing, not just the canonical variant."
@@ -562,7 +813,7 @@ def binder_auto_layout(
         False, "--append", help="Keep existing placements instead of replacing the layout."
     ),
 ) -> None:
-    """Fill a binder from a set in card-number or rarity order."""
+    """Fill a binder from a set or a goal in card-number or rarity order."""
     try:
         parsed_mode = AutoLayoutMode(mode.replace("-", "_"))
     except ValueError:
@@ -571,20 +822,13 @@ def binder_auto_layout(
 
     db = SessionLocal()
     try:
-        set_row = db.execute(
-            select(SetModel).where(SetModel.ptcg_set_id == set_id)
-        ).scalar_one_or_none()
-        if set_row is None:
-            console.print(
-                f"[red]No set with ptcg_set_id={set_id!r} -- "
-                f"run `bb ingest cards --set {set_id}` first.[/red]"
-            )
-            raise typer.Exit(code=1)
+        set_row_id = _layout_source_set(db, set_id, goal_id)
         try:
             result = binder_service.apply_auto_layout(
                 db,
                 binder_id,
-                set_row.id,
+                set_row_id,
+                goal_id=goal_id,
                 mode=parsed_mode,
                 canonical_only=not master,
                 skip_reverse_holos=skip_reverse_holos,
@@ -592,8 +836,8 @@ def binder_auto_layout(
                 start_subset_on_new_page=start_subset_on_new_page,
                 replace=not append,
             )
-        except LookupError:
-            console.print(f"[red]No binder with id {binder_id}.[/red]")
+        except LookupError as exc:
+            console.print(f"[red]{exc}.[/red]")
             raise typer.Exit(code=1) from None
         except LayoutError as exc:
             for error in exc.errors:
@@ -846,7 +1090,8 @@ def binder_extract_colors(
 @binder_app.command("michi")
 def binder_michi(
     binder_id: int,
-    set_code: str = typer.Option(..., "--set", help="ptcg_set_id, e.g. sv8."),
+    set_code: str | None = typer.Option(None, "--set", help="ptcg_set_id, e.g. sv8."),
+    goal_id: int | None = typer.Option(None, "--goal", help="Lay out exactly this goal's cards."),
     key: str = typer.Option("species", "--key", help="species | artist | colour | evolution"),
     trials: int = typer.Option(24, "--trials", help="Best-of-N template/assignment trials."),
     seed: int = typer.Option(0, "--seed", help="Seeded, so a run is reproducible."),
@@ -870,16 +1115,12 @@ def binder_michi(
 
     db = SessionLocal()
     try:
-        set_row = db.execute(
-            select(SetModel).where(SetModel.ptcg_set_id == set_code)
-        ).scalar_one_or_none()
-        if set_row is None:
-            console.print(f"[red]No set with ptcg_set_id {set_code!r}.[/red]")
-            raise typer.Exit(code=1)
+        set_row_id = _layout_source_set(db, set_code, goal_id)
         result = apply_michi_layout(
             db,
             binder_id,
-            set_row.id,
+            set_row_id,
+            goal_id=goal_id,
             cluster_key=cluster_key,
             weights=ScoreWeights(w_sym, w_col, w_hero, w_fill, w_orph),
             trials=trials,

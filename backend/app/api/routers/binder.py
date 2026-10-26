@@ -38,6 +38,13 @@ from app.services.inserts import InsertError
 router = APIRouter(prefix="/binders", tags=["binders"])
 
 
+def _require_one_source(set_id: int | None, goal_id: int | None) -> None:
+    """Auto-layout fills from a set or from a goal. Both or neither is a malformed request,
+    checked here so it is a 422 rather than a ValueError from deep in the service."""
+    if (set_id is None) == (goal_id is None):
+        raise HTTPException(status_code=422, detail="Give exactly one of set_id or goal_id")
+
+
 def _data(body: BinderIn) -> BinderData:
     return BinderData(
         name=body.name,
@@ -179,11 +186,13 @@ def post_auto_layout(
     except ValueError as exc:
         detail = f"Unknown auto-layout mode {body.mode!r}"
         raise HTTPException(status_code=422, detail=detail) from exc
+    _require_one_source(body.set_id, body.goal_id)
     try:
         result = binder_service.apply_auto_layout(
             db,
             binder_id,
             body.set_id,
+            goal_id=body.goal_id,
             mode=mode,
             canonical_only=body.canonical_only,
             skip_reverse_holos=body.skip_reverse_holos,
@@ -261,7 +270,7 @@ def export_spread(
 def michi_layout(
     binder_id: int, body: MichiLayoutIn, db: Session = Depends(get_db)
 ) -> MichiLayoutOut:
-    """Lay a set out Michi-style: cluster, template, assign, score, best of N.
+    """Lay a set or a goal out Michi-style: cluster, template, assign, score, best of N.
 
     Separate from /auto-layout rather than another mode on it: the inputs barely overlap (cluster
     key and score weights instead of rarity grouping) and so does the result, which carries a
@@ -275,12 +284,14 @@ def michi_layout(
             status_code=422, detail=f"Unknown cluster_key {body.cluster_key!r} -- use: {valid}"
         ) from exc
 
+    _require_one_source(body.set_id, body.goal_id)
     w = body.weights
     try:
         result = michi_service.apply_michi_layout(
             db,
             binder_id,
             body.set_id,
+            goal_id=body.goal_id,
             cluster_key=key,
             weights=ScoreWeights(w.symmetry, w.colour, w.hero, w.fill, w.orphan),
             trials=body.trials,

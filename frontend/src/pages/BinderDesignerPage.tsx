@@ -13,7 +13,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import type { ClusterKey, MichiWeights } from "../lib/types";
 import { DEFAULT_MICHI_WEIGHTS } from "../lib/types";
 import { PlacedCard, parsePocketId } from "../components/BinderPocket";
@@ -36,13 +36,18 @@ import {
 } from "../components/ui";
 import {
   useAutoLayout,
+  useCardSearch,
+  useGoals,
   useMichiLayout,
   useBinderLayout,
   useSetPlacements,
   useSetDetail,
   useSets,
 } from "../lib/queries";
-import type { CardOut, PlacementBatchIn, PlacementOut } from "../lib/types";
+import type { CardOut, CardSearchItem, PlacementBatchIn, PlacementOut } from "../lib/types";
+
+const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === "true";
+const POOL_LIMIT = 500;
 
 /**
  * The binder editor.
@@ -74,13 +79,57 @@ function asUpsert(p: PlacementOut, at?: { page_index: number; row: number; col: 
   };
 }
 
-/** A card in the collection pool, draggable into a pocket. */
-function PoolCard({ card }: { card: CardOut }) {
-  const canonical = card.variants.find((v) => v.is_canonical) ?? card.variants[0];
+/**
+ * One draggable entry in the pool. A set pool offers each card's canonical printing; a goal pool
+ * offers exactly the goal's printings, so a master-set goal lists a reverse holo as its own entry.
+ */
+interface PoolEntry {
+  variantId: number;
+  number: string;
+  name: string;
+  image_small: string | null;
+  owned: boolean;
+  /** Second line, when the number alone is ambiguous: the set and/or the printing. */
+  detail?: string;
+}
+
+function setPoolEntries(cards: CardOut[]): PoolEntry[] {
+  return cards.flatMap((card) => {
+    const canonical = card.variants.find((v) => v.is_canonical) ?? card.variants[0];
+    if (!canonical) return [];
+    return [
+      {
+        variantId: canonical.id,
+        number: card.number,
+        name: card.name,
+        image_small: card.image_small,
+        owned: card.is_owned,
+      },
+    ];
+  });
+}
+
+function goalPoolEntries(cards: CardSearchItem[]): PoolEntry[] {
+  return cards.flatMap((card) =>
+    card.variants.map((v) => ({
+      variantId: v.id,
+      number: card.number,
+      name: card.name,
+      image_small: card.image_small,
+      owned: v.owned_quantity > 0,
+      detail:
+        v.variant === "normal" || v.variant === "holofoil"
+          ? card.set_name
+          : `${card.set_name} · ${v.variant.replace(/_/g, " ")}`,
+    })),
+  );
+}
+
+/** A card in the pool, draggable into a pocket. */
+function PoolCard({ entry }: { entry: PoolEntry }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: `pool:${canonical?.id ?? 0}`,
-    data: { variantId: canonical?.id, card },
-    disabled: !canonical,
+    id: `pool:${entry.variantId}`,
+    data: { variantId: entry.variantId, entry },
   });
 
   return (
@@ -89,14 +138,14 @@ function PoolCard({ card }: { card: CardOut }) {
       {...listeners}
       {...attributes}
       role="button"
-      aria-label={`${card.number} ${card.name}${card.is_owned ? ", owned" : ", not owned"}`}
+      aria-label={`${entry.number} ${entry.name}${entry.owned ? ", owned" : ", not owned"}`}
       className={`flex cursor-grab touch-none items-center gap-2 rounded-lg border p-1.5 text-left transition-colors active:cursor-grabbing ${
         isDragging ? "opacity-25" : ""
-      } ${card.is_owned ? "border-accent-line bg-accent-surface" : "border-line bg-raised"}`}
+      } ${entry.owned ? "border-accent-line bg-accent-surface" : "border-line bg-raised"}`}
     >
-      {card.image_small ? (
+      {entry.image_small ? (
         <img
-          src={card.image_small}
+          src={entry.image_small}
           alt=""
           className="aspect-card w-8 flex-none rounded-[3px] bg-well object-cover"
           loading="lazy"
@@ -106,8 +155,11 @@ function PoolCard({ card }: { card: CardOut }) {
         <div className="hatch aspect-card w-8 flex-none rounded-[3px] border border-line-card" />
       )}
       <div className="flex min-w-0 flex-col">
-        <span className="font-mono text-[10px] font-medium text-accent-text">{card.number}</span>
-        <span className="truncate text-[11.5px] leading-tight text-ink-2">{card.name}</span>
+        <span className="font-mono text-[10px] font-medium text-accent-text">{entry.number}</span>
+        <span className="truncate text-[11.5px] leading-tight text-ink-2">{entry.name}</span>
+        {entry.detail && (
+          <span className="truncate text-[10px] leading-tight text-ink-3">{entry.detail}</span>
+        )}
       </div>
     </div>
   );
@@ -180,11 +232,16 @@ export default function BinderDesignerPage() {
   const { binderId: binderIdParam } = useParams();
   const binderId = Number(binderIdParam);
 
+  const [searchParams] = useSearchParams();
+  const initialGoal = searchParams.get("goal");
+
   const { data: layout, isLoading, error } = useBinderLayout(binderId);
   const setPlacements = useSetPlacements(binderId);
   const autoLayout = useAutoLayout(binderId);
   const michiLayout = useMichiLayout(binderId);
   const { data: sets } = useSets();
+  // The standalone demo backs sets only, so it never offers goals as a pool source.
+  const { data: goals } = useGoals(!DEMO_MODE);
 
   const [spreadIndex, setSpreadIndex] = useState(0);
   const [pageSize, setPageSize] = useState<"letter" | "a4">("letter");
@@ -192,16 +249,30 @@ export default function BinderDesignerPage() {
   const [weights, setWeights] = useState<MichiWeights>(DEFAULT_MICHI_WEIGHTS);
   const [exporting, setExporting] = useState<"pdf" | "png" | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [poolSource, setPoolSource] = useState<"set" | "goal">(initialGoal ? "goal" : "set");
   const [poolSetId, setPoolSetId] = useState<string>("");
+  const [poolGoalId, setPoolGoalId] = useState<string>(initialGoal ?? "");
   const [ownedOnly, setOwnedOnly] = useState(false);
   const [dragging, setDragging] = useState<
-    { kind: "pool"; card: CardOut } | { kind: "placement"; placement: PlacementOut } | null
+    { kind: "pool"; entry: PoolEntry } | { kind: "placement"; placement: PlacementOut } | null
   >(null);
   const [undoStack, setUndoStack] = useState<Edit[]>([]);
   const [redoStack, setRedoStack] = useState<Edit[]>([]);
   const [mode, setMode] = useState<"set_order" | "rarity_tiered" | "michi">("set_order");
 
-  const { data: poolSet } = useSetDetail(poolSetId || undefined);
+  const { data: poolSet } = useSetDetail(
+    poolSource === "set" ? poolSetId || undefined : undefined,
+  );
+  // A goal's cards, every printing it holds, in release order. Capped at the endpoint's page
+  // limit: the pool is for hand-placing, and auto-layout reads the whole goal server-side.
+  const { data: poolGoal } = useCardSearch(
+    { goal_id: Number(poolGoalId), variant_scope: "all", sort: "oldest", limit: POOL_LIMIT },
+    poolSource === "goal" && poolGoalId !== "",
+  );
+  const source =
+    poolSource === "set"
+      ? poolSet && { set_id: poolSet.id }
+      : poolGoalId !== "" && { goal_id: Number(poolGoalId) };
 
   const sensors = useSensors(useSensor(PointerSensor, {
     // A few pixels of slop, so a click on the remove button is not read as a drag.
@@ -263,7 +334,7 @@ export default function BinderDesignerPage() {
 
   function handleDragStart(event: DragStartEvent) {
     const data = event.active.data.current;
-    if (data?.card) setDragging({ kind: "pool", card: data.card as CardOut });
+    if (data?.entry) setDragging({ kind: "pool", entry: data.entry as PoolEntry });
     else if (data?.placementId) {
       const from = data.from as { pageIndex: number; row: number; col: number };
       const placement = byCell.get(`${from.pageIndex}:${from.row}:${from.col}`);
@@ -331,9 +402,9 @@ export default function BinderDesignerPage() {
   }
 
   function handleMichiLayout() {
-    if (!poolSet) return;
+    if (!source) return;
     michiLayout.mutate(
-      { set_id: poolSet.id, cluster_key: clusterKey, weights },
+      { ...source, cluster_key: clusterKey, weights },
       {
         // Same as the other modes: a whole-binder rewrite has no small inverse batch.
         onSuccess: () => {
@@ -345,11 +416,11 @@ export default function BinderDesignerPage() {
   }
 
   function handleAutoLayout() {
-    if (!poolSet) return;
+    if (!source) return;
     autoLayout.mutate(
       // Narrowed: handleAutoLayout is only reachable when the mode is not michi, which has
       // its own endpoint.
-      { set_id: poolSet.id, mode: mode as "set_order" | "rarity_tiered" },
+      { ...source, mode: mode as "set_order" | "rarity_tiered" },
       {
         // Auto-layout rewrites the whole binder; there is no small inverse batch that would
         // undo it, so the history is dropped rather than left holding stale cells.
@@ -393,7 +464,10 @@ export default function BinderDesignerPage() {
     }
   }
 
-  const poolCards = (poolSet?.cards ?? []).filter((c) => !ownedOnly || c.is_owned);
+  const poolEntries = (
+    poolSource === "set" ? setPoolEntries(poolSet?.cards ?? []) : goalPoolEntries(poolGoal?.cards ?? [])
+  ).filter((e) => !ownedOnly || e.owned);
+  const poolTruncated = poolSource === "goal" && poolGoal && poolGoal.total > poolGoal.cards.length;
 
   return (
     <Page>
@@ -460,27 +534,60 @@ export default function BinderDesignerPage() {
         >
         <div className="flex flex-col gap-5 xl:flex-row">
           <Panel className="flex w-full flex-none flex-col gap-3 p-4 lg:w-72">
-            <SectionLabel>Collection pool</SectionLabel>
+            <SectionLabel>Card pool</SectionLabel>
 
-            <Field label="Set">
-              <Select value={poolSetId} onChange={(e) => setPoolSetId(e.target.value)}>
-                <option value="">Choose a set...</option>
-                {sets?.map((s) => (
-                  <option key={s.ptcg_set_id} value={s.ptcg_set_id}>
-                    {s.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+            {!DEMO_MODE && (
+              <Segmented
+                value={poolSource}
+                onChange={setPoolSource}
+                options={[
+                  { value: "set", label: "a set" },
+                  { value: "goal", label: "a goal" },
+                ]}
+              />
+            )}
+
+            {poolSource === "set" ? (
+              <Field label="Set">
+                <Select value={poolSetId} onChange={(e) => setPoolSetId(e.target.value)}>
+                  <option value="">Choose a set...</option>
+                  {sets?.map((s) => (
+                    <option key={s.ptcg_set_id} value={s.ptcg_set_id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            ) : (
+              <Field
+                label="Goal"
+                hint={goals && goals.length === 0 ? "No goals yet -- make one on Goals." : undefined}
+              >
+                <Select value={poolGoalId} onChange={(e) => setPoolGoalId(e.target.value)}>
+                  <option value="">Choose a goal...</option>
+                  {goals?.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
 
             <div className="flex items-center gap-2">
               <Chip active={ownedOnly} onClick={() => setOwnedOnly((v) => !v)}>
                 owned only
               </Chip>
-              <span className="font-mono text-[11px] text-ink-3">{poolCards.length} cards</span>
+              <span className="font-mono text-[11px] text-ink-3">{poolEntries.length} cards</span>
             </div>
+            {poolTruncated && (
+              <p className="text-[11px] text-ink-3">
+                Showing the first {POOL_LIMIT} of {poolGoal.total} cards. Fill binder lays out all
+                of them.
+              </p>
+            )}
 
-            {poolSetId && (
+            {source && (
               <div className="flex flex-col gap-2 border-t border-line pt-3">
                 <SectionLabel>Auto-layout</SectionLabel>
                 <Segmented
@@ -593,7 +700,7 @@ export default function BinderDesignerPage() {
                     </div>
                     {michiLayout.data.score.unmeasured.includes("colour") && (
                       <p className="text-[10.5px] text-warn-text">
-                        Colour did not count: no card in this set has an extracted colour yet.
+                        Colour did not count: no card in this pool has an extracted colour yet.
                       </p>
                     )}
                   </div>
@@ -623,8 +730,8 @@ export default function BinderDesignerPage() {
             )}
 
             <div className="flex max-h-[60vh] flex-col gap-1.5 overflow-y-auto">
-              {poolCards.map((c) => (
-                <PoolCard key={c.id} card={c} />
+              {poolEntries.map((e) => (
+                <PoolCard key={e.variantId} entry={e} />
               ))}
             </div>
           </Panel>
@@ -671,9 +778,9 @@ export default function BinderDesignerPage() {
             </div>
           ) : dragging?.kind === "pool" ? (
             <div className="aspect-pocket w-24 overflow-hidden rounded-md border border-accent bg-raised p-[3px] shadow-lift">
-              {dragging.card.image_small ? (
+              {dragging.entry.image_small ? (
                 <img
-                  src={dragging.card.image_small}
+                  src={dragging.entry.image_small}
                   alt=""
                   className="h-full w-full rounded-[5px] object-cover"
                 />
