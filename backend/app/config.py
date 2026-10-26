@@ -38,6 +38,10 @@ class Settings(BaseSettings):
         return self.data_dir / "sealed_map.yaml"
 
     @property
+    def printing_tags_path(self) -> Path:
+        return self.data_dir / "printing_tags.yaml"
+
+    @property
     def templates_dir(self) -> Path:
         return self.data_dir / "binder_templates"
 

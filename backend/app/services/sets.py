@@ -9,6 +9,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.ingest.printing_tags import printing_label
 from app.models import Card, CardVariant, CollectionItem, SealedProduct, Set
 from app.services.prices import get_current_prices
 from app.services.simulate import resolve_pull_rate_profile
@@ -23,6 +24,10 @@ class VariantView:
     is_canonical: bool
     market_price: Decimal | None
     owned_quantity: int
+    is_special: bool = False
+    # Collector-facing name for a tagged printing ("Prerelease stamp"); None for the base
+    # printings, which the UI names itself.
+    label: str | None = None
 
 
 @dataclass(slots=True)
@@ -145,6 +150,8 @@ def get_set_detail(db: Session, ptcg_set_id: str, collection_id: int) -> SetDeta
                     is_canonical=v.is_canonical,
                     market_price=price["market"] if price else None,
                     owned_quantity=qty,
+                    is_special=v.is_special,
+                    label=printing_label(str(v.variant)),
                 )
             )
         if card_owned:

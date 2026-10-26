@@ -157,6 +157,34 @@ Halloween promo bundle product, not something to build a pull-rate profile for.
       follow-up but deliberately not bundled into this pass since they're a different kind of
       change (core normalization, not a treatment-suffix whitelist) and deserve their own
       verification.
+- [ ] **Fixing one-off data errors still means editing the database by hand**, and the next
+      ingest undoes it. Planned as admin data-correction tooling (CLI, not on the site); see
+      `docs/06-roadmap.md` 4.7. Many of the gaps below are the kind of thing it would fix.
+- [ ] **3a. The printing (variant) catalogue needs continued build-out.** Owner's standing ask
+      (2026-10-25): keep extending the database until every real printing of a card is a
+      `card_variant` row, so Master and Grand Master Set goals are complete. Done so far: base
+      subTypes, tagged printings (`data/printing_tags.yaml`), WotC 1st Edition / Unlimited, and
+      Base Set Shadowless via an edition group. Known gaps, roughly by size:
+  - [ ] ~373 cards with no real printing (down from 1,911 once `name_key` fixed the hyphen,
+        accent, `&`, symbol and trailing-number gaps described above). They are usable (each has
+        an `unpriced` placeholder, shown as "Printing unknown") but have no price. Largest
+        groups: `g1` 34, `bw11` 25, `ecard3` 16, `sm5`/`sm8` 15, the trainer kits (unmappable,
+        §1). Remaining patterns include energy abbreviations ("Powerful C Energy", "Unit Energy
+        GRW") and stamped promos. Each matcher fix retires its placeholders automatically.
+  - [ ] Printings TCGplayer doesn't sell as a product get no row, because rows are derived from
+        the price feed: Champions Festival placement stamps, Base Set's later print runs (the
+        "1999-2000" copyright and UK 4th print), 1st Edition stamp variants (thin/thick, "ghost"),
+        and most error cards. Needs a curated, unpriced printing source, which is a model
+        decision (a variant with no price identity), so ask before starting.
+  - [ ] Unknown tags the ingest logs per set (`np`: City Championships, Origins Game Fair, Gen
+        Con, magazine promos; `bw5` "Gold"; `sm35` "Secret Shining"; Base Set Shadowless
+        "Pikachu (Red Cheeks)"). Classify each in `data/printing_tags.yaml`.
+  - [ ] Tagged printings sold with more than one subType (one product, two finishes) are skipped;
+        they need a slug per finish.
+  - [ ] Other print runs TCGplayer may sell as their own group: check the tcgcsv group list for
+        any beyond 1663 and add them under `edition_groups`.
+  - [ ] Feed holes, nothing to do but recheck: Base Set Shadowless Mewtwo has no
+        `1st Edition Holofoil` price row.
 - [ ] `data/sealed_map.yaml`: ~2,405 of ~2,922 tcgcsv sealed products still need hand
       classification (`product_type` / `packs_per_unit`) — the remaining ~517 were mechanically
       classifiable by name pattern. `bb sync sealedmap` prints the review queue. Tracked here as

@@ -2,6 +2,7 @@
 reusable from the CLI (see docs/01-architecture.md)."""
 from datetime import date
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -16,6 +17,8 @@ class VariantOut(BaseModel):
     is_canonical: bool
     market_price: Decimal | None
     owned_quantity: int
+    is_special: bool = False
+    label: str | None = None
 
 
 class CardOut(BaseModel):
@@ -118,12 +121,124 @@ class PortfolioSummaryOut(BaseModel):
     price_date: str | None
 
 
+class CardQueryIn(BaseModel):
+    """Mirrors services.cards.CardQuery. Empty lists mean "no constraint"."""
+
+    q: str | None = None
+    set_ids: list[int] = []
+    series: list[str] = []
+    rarities: list[str] = []
+    supertypes: list[str] = []
+    types: list[str] = []
+    subtypes: list[str] = []
+    artists: list[str] = []
+    pokedex_numbers: list[int] = []
+    variants: list[str] = []
+    variant_scope: Literal["canonical", "all"] = "canonical"
+    owned: Literal["owned", "missing"] | None = None
+    min_price: Decimal | None = None
+    max_price: Decimal | None = None
+    year_from: int | None = None
+    year_to: int | None = None
+    goal_id: int | None = None
+
+
+class CardSearchIn(CardQueryIn):
+    sort: Literal["newest", "oldest", "name", "price"] = "newest"
+    offset: int = Field(default=0, ge=0)
+    limit: int = Field(default=60, ge=1, le=500)
+
+
+class CardSearchItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    ptcg_card_id: str
+    number: str
+    number_sort: int
+    name: str
+    supertype: str | None
+    rarity: str | None
+    artist: str | None
+    types: list[str]
+    subtypes: list[str]
+    national_pokedex_numbers: list[int]
+    image_small: str | None
+    image_large: str | None
+    set_id: int
+    ptcg_set_id: str
+    set_name: str
+    series: str | None
+    release_date: date | None
+    variants: list[VariantOut]
+    is_owned: bool
+
+
+class CardSearchOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    total: int
+    offset: int
+    limit: int
+    cards: list[CardSearchItemOut]
+    unplaceable_count: int
+
+
+class FacetValueOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    value: str
+    count: int
+    label: str | None = None
+
+
+class SpeciesFacetOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    pokedex_number: int
+    name: str
+    count: int
+
+
+class CardFacetsOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    rarities: list[FacetValueOut]
+    supertypes: list[FacetValueOut]
+    types: list[FacetValueOut]
+    subtypes: list[FacetValueOut]
+    artists: list[FacetValueOut]
+    series: list[FacetValueOut]
+    variants: list[FacetValueOut]
+    species: list[SpeciesFacetOut]
+
+
 class GoalIn(BaseModel):
     name: str
     goal_type: str
     set_id: int | None = None
     filter_json: dict | None = None
     target_condition: str = "NM"
+    # Custom goals: the hand-picked starting list, plus optionally every card a search matches
+    # (a frozen snapshot). Filter goals: `query` is stored as the live filter instead of
+    # `filter_json`, so the UI never has to know the stored key names.
+    card_variant_ids: list[int] = []
+    query: CardQueryIn | None = None
+
+
+class GoalItemsEditIn(BaseModel):
+    add: list[int] = []
+    remove: list[int] = []
+    # "Add every card this search matches" without the client paging through the results.
+    add_query: CardQueryIn | None = None
+
+
+class GoalItemsEditOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    added: int
+    removed: int
+    item_count: int
 
 
 class GoalOut(BaseModel):
@@ -149,6 +264,10 @@ class NeedItemOut(BaseModel):
     owned_qty: int
     need_qty: int
     market_price: Decimal | None
+    set_name: str
+    ptcg_set_id: str
+    image_small: str | None
+    variant_label: str | None = None
 
 
 class SinglesCostOut(BaseModel):
@@ -170,6 +289,7 @@ class GoalDetailOut(BaseModel):
     goal_type: str
     set_id: int | None
     target_condition: str
+    filter_json: dict | None
     items: list[NeedItemOut]
     cost: SinglesCostOut
     unpriced_count: int
@@ -347,7 +467,9 @@ class InsertAssetOut(BaseModel):
 
 
 class AutoLayoutIn(BaseModel):
-    set_id: int
+    # Exactly one of the two: lay out a whole set, or exactly a goal's cards.
+    set_id: int | None = None
+    goal_id: int | None = None
     mode: str = "set_order"
     canonical_only: bool = True
     skip_reverse_holos: bool = False
@@ -367,7 +489,9 @@ class MichiWeightsIn(BaseModel):
 
 
 class MichiLayoutIn(BaseModel):
-    set_id: int
+    # Exactly one of the two, as in AutoLayoutIn.
+    set_id: int | None = None
+    goal_id: int | None = None
     cluster_key: str = "species"
     trials: int = Field(default=24, ge=1, le=200)
     seed: int = 0

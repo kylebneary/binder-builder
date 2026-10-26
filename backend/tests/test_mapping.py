@@ -1,9 +1,12 @@
+import pytest
 from app.ingest.base import ProductDTO
 from app.ingest.mapping import (
     MatchResult,
     match_cards_in_set,
+    name_key,
     normalize_name,
     normalize_number,
+    product_name_keys,
     strip_disambiguating_number,
     strip_known_treatment_suffix,
 )
@@ -42,6 +45,40 @@ def test_strip_known_treatment_suffix_undoes_tcgcsv_clean_name_treatment_word():
     assert strip_known_treatment_suffix("Umbreon Gold") == "Umbreon"
     # A name with no known treatment suffix is left alone.
     assert strip_known_treatment_suffix("Alolan Diglett") == "Alolan Diglett"
+
+
+def test_strip_disambiguating_number_ignores_zero_padding_and_a_missing_total():
+    assert strip_disambiguating_number("Lotad 063 107", "63/107") == "Lotad"
+    assert strip_disambiguating_number("Magmar 3 12", "03/12") == "Magmar"
+    assert strip_disambiguating_number("M Rayquaza EX 61", "61/108") == "M Rayquaza EX"
+    assert strip_disambiguating_number("Porygon2", "2/64") == "Porygon2"
+
+
+@pytest.mark.parametrize(
+    ("card_name", "clean_name", "number"),
+    [
+        ("Lucario-EX", "Lucario EX", "54/111"),
+        ("Pokémon Catcher", "Pokemon Catcher", "95/98"),
+        ("Solgaleo & Lunala-GX", "Solgaleo and Lunala GX Full Art", "216/236"),
+        ("Nidoran ♀", "Nidoran F", "82/130"),
+        ("Gyarados ★ δ", "Gyarados Star Delta Species", "102/110"),
+        ("Ethan's Ho-Oh ex", "Ethans Ho Oh ex 239 182", "239/182"),
+        ("Dragonite-EX", "Dragonite EX 108 Full Art", "108/106"),
+        ("Shining Ho-Oh", "Shining Ho Oh SM70", "SM70"),
+    ],
+)
+def test_product_name_key_matches_real_tcgcsv_spellings(card_name, clean_name, number):
+    """Real pairs from the 2026-10-25 review queue: the same card, spelled differently."""
+    assert name_key(card_name) in product_name_keys(clean_name, number)
+
+
+def test_name_key_still_tells_different_cards_apart():
+    assert name_key("Pikachu") not in product_name_keys("Raichu", "26/102")
+    assert name_key("Charizard") not in product_name_keys("Charizard ex", "6/165")
+
+
+def test_a_name_ending_in_its_own_number_still_matches():
+    assert name_key("Card 4") in product_name_keys("Card 4", "4/102")
 
 
 def test_strip_known_treatment_suffix_prefers_longest_overlapping_match():

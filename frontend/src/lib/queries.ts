@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
 import type {
   AutoLayoutIn,
@@ -6,6 +6,11 @@ import type {
   BinderIn,
   BinderLayoutOut,
   BinderOut,
+  CardFacetsOut,
+  CardSearchIn,
+  CardSearchOut,
+  GoalItemsEditIn,
+  GoalItemsEditOut,
   CollectionItemIn,
   CollectionItemOut,
   GoalDetailOut,
@@ -76,10 +81,11 @@ export function useUpsertCollectionItem(ptcgSetId: string | undefined) {
   });
 }
 
-export function useGoals() {
+export function useGoals(enabled = true) {
   return useQuery({
     queryKey: ["goals"],
     queryFn: () => api<GoalOut[]>("/goals"),
+    enabled,
   });
 }
 
@@ -109,6 +115,68 @@ export function useDeleteGoal() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["goals"] });
     },
+  });
+}
+
+/** Goal edits change the goal's item list (and, for the set it infers, its simulatability), so
+ * every goal query is invalidated rather than picking out the one detail. */
+export function useEditGoalItems(goalId: number | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: GoalItemsEditIn) =>
+      api<GoalItemsEditOut>(`/goals/${goalId}/items`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["goals"] });
+      void queryClient.invalidateQueries({ queryKey: ["cards", "search"] });
+    },
+  });
+}
+
+export function useConvertGoalToCustom() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (goalId: number) =>
+      api<GoalOut>(`/goals/${goalId}/convert-to-custom`, { method: "POST" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["goals"] });
+    },
+  });
+}
+
+export function useResyncGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (goalId: number) => api<GoalOut>(`/goals/${goalId}/resync`, { method: "POST" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["goals"] });
+    },
+  });
+}
+
+/* ------------------------------------------------------------- card search */
+
+/** A read despite being a POST -- the filter body is too list-heavy for a query string. Keyed
+ * on the whole body, and `keepPreviousData` keeps the grid on screen while the next page or
+ * filter loads instead of flashing empty. */
+export function useCardSearch(body: CardSearchIn, enabled = true) {
+  return useQuery({
+    queryKey: ["cards", "search", body],
+    queryFn: () =>
+      api<CardSearchOut>("/cards/search", { method: "POST", body: JSON.stringify(body) }),
+    placeholderData: keepPreviousData,
+    enabled,
+  });
+}
+
+/** Distinct filter values. Only changes on ingest, so it is fetched once per session. */
+export function useCardFacets() {
+  return useQuery({
+    queryKey: ["cards", "facets"],
+    queryFn: () => api<CardFacetsOut>("/cards/facets"),
+    staleTime: Infinity,
   });
 }
 

@@ -16,6 +16,7 @@ from app.services.binder import (
     export_layout_json,
     get_binder_layout,
     import_layout_json,
+    layout_source,
     move_placement,
     set_placement,
     update_binder,
@@ -529,3 +530,95 @@ def test_deleting_a_binder_removes_its_placements(db):
 
     assert db.query(BinderPlacement).filter_by(binder_id=binder.id).count() == 0
     assert db.query(BinderPlacement).count() == 0
+
+
+# --- laying out a goal (catalogue fixture: see conftest.seed_catalogue) ----------------------
+
+
+def _goal(db, variant_ids: list[int]) -> int:
+    from app.models.enums import GoalType
+    from app.services.goals import create_goal
+
+    return create_goal(db, "Goal", GoalType.CUSTOM, card_variant_ids=variant_ids).id
+
+
+def test_auto_layout_from_a_goal_places_exactly_its_variants_set_by_set(db, catalogue):
+    goal_id = _goal(
+        db,
+        [
+            catalogue.tag_team_holo.id,
+            catalogue.pikachu_ex_reverse.id,  # non-canonical: a goal says which printing it wants
+            catalogue.pikachu_normal.id,
+            catalogue.charizard_holo.id,
+        ],
+    )
+    binder = _binder(db)
+    result = apply_auto_layout(db, binder.id, goal_id=goal_id)
+    assert result.placed == 4 and result.unplaced == 0 and result.skipped_no_variant == 0
+
+    layout = get_binder_layout(db, binder.id)
+    assert layout is not None
+    order = [p.card_variant_id for p in sorted(layout.placements, key=lambda p: (p.row, p.col))]
+    # Base (1999) before Surging Sparks (2024), card number order within each.
+    assert order == [
+        catalogue.charizard_holo.id,
+        catalogue.pikachu_normal.id,
+        catalogue.pikachu_ex_reverse.id,
+        catalogue.tag_team_holo.id,
+    ]
+
+
+def test_auto_layout_needs_exactly_one_source(db, catalogue):
+    binder = _binder(db)
+    goal_id = _goal(db, [catalogue.pikachu_normal.id])
+    with pytest.raises(ValueError):
+        apply_auto_layout(db, binder.id)
+    with pytest.raises(ValueError):
+        apply_auto_layout(db, binder.id, catalogue.base.id, goal_id=goal_id)
+
+
+def test_auto_layout_from_a_missing_goal_raises_lookup_error(db, catalogue):
+    binder = _binder(db)
+    with pytest.raises(LookupError):
+        apply_auto_layout(db, binder.id, goal_id=999999)
+
+
+def test_layout_source_ranks_sets_by_release(db, catalogue):
+    goal_id = _goal(db, [catalogue.ho_oh_normal.id, catalogue.pikachu_normal.id])
+    ranks = {r.variant.id: r.set_rank for r in layout_source(db, goal_id=goal_id)}
+    assert ranks == {catalogue.pikachu_normal.id: 0, catalogue.ho_oh_normal.id: 1}
+
+
+def test_michi_layout_from_a_goal_uses_only_its_cards(db, catalogue):
+    from app.binder.michi import ClusterKey
+    from app.services.michi import apply_michi_layout
+
+    wanted = {
+        catalogue.pikachu_normal.id, catalogue.pikachu_ex_normal.id, catalogue.ho_oh_normal.id
+    }
+    goal_id = _goal(db, sorted(wanted))
+    binder = _binder(db)
+    result = apply_michi_layout(db, binder.id, goal_id=goal_id, cluster_key=ClusterKey.SPECIES)
+    layout = get_binder_layout(db, binder.id)
+    assert layout is not None
+    placed = {p.card_variant_id for p in layout.placements if p.kind == "card"}
+    assert placed <= wanted
+    assert result.placed == len(placed) and result.placed + result.unplaced == len(wanted)
+
+
+def test_master_layout_of_a_set_leaves_out_stamps(db, catalogue):
+    from app.models import CardVariant as CV
+
+    stamp = CV(
+        card_id=catalogue.pikachu_ex.id,
+        variant="prerelease",
+        tcgplayer_product_id=799998,
+        tcgplayer_sub_type_name="Holofoil",
+        is_special=True,
+    )
+    db.add(stamp)
+    db.commit()
+    rows = layout_source(db, set_id=catalogue.sparks.id, canonical_only=False)
+    ids = {r.variant.id for r in rows}
+    assert catalogue.pikachu_ex_reverse.id in ids
+    assert stamp.id not in ids

@@ -7,6 +7,7 @@ import { DEMO_BINDER_ID } from "./lib/demoData";
 import BinderDesignerPage from "./pages/BinderDesignerPage";
 import BindersPage from "./pages/BindersPage";
 import BulkEntryPage from "./pages/BulkEntryPage";
+import CardSearchPage from "./pages/CardSearchPage";
 import GoalDetailPage from "./pages/GoalDetailPage";
 import GoalsPage from "./pages/GoalsPage";
 import SetDetailPage from "./pages/SetDetailPage";
@@ -53,6 +54,7 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<SetListPage />} />
                 <Route path="/sets/:ptcgSetId" element={<SetDetailPage />} />
+                <Route path="/cards" element={<CardSearchPage />} />
                 <Route
                   path="/portfolio"
                   element={

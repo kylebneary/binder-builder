@@ -78,7 +78,10 @@ classifier. Do not classify on the product name; naming is inconsistent across e
 ```
 
 `subTypeName` values seen: `Normal`, `Holofoil`, `Reverse Holofoil`, `1st Edition Holofoil`,
-`1st Edition Normal`, `Unlimited Holofoil`. **This field is why the data model keys prices to a
+`1st Edition Normal`, `Unlimited Holofoil`, and — on WotC-era non-holo cards, 2026-10-25 survey —
+bare `1st Edition` and `Unlimited` (674 products each). Base Set's Shadowless/1st Edition run is
+not a subTypeName at all but its own group, "Base Set (Shadowless)" (groupId 1663); see
+`edition_groups` in `data/printing_tags.yaml` and `docs/02-data-model.md`. **This field is why the data model keys prices to a
 card *variant*, not a card.** A card with a $2 Normal and a $30 Reverse Holofoil is one product ID
 with two price rows, and a master-set goal needs both.
 
@@ -153,10 +156,28 @@ There is no shared key. Match on `(set, card number, name)`:
    same set (e.g. "Dhelmise V" → cleanName "Dhelmise V Full Art"); `app/ingest/mapping.py`'s
    `strip_known_treatment_suffix()` undoes a known, finite whitelist of these (found 2026-08-25
    while investigating why SWSH-era Rare Ultra/Rainbow/Secret cards had zero priced variants —
-   see `docs/07-data-backlog.md` §3). It does not (yet) handle `&`-vs-"and" or hyphen-vs-space
-   differences in the base name itself — a handful of cards per set still fall through to the
-   review queue on those.
+   see `docs/07-data-backlog.md` §3). Names are compared on `name_key` (added 2026-10-25):
+   accents folded, `&` = "and", `♂`/`♀` = M/F, `★` = Star, all spaces and punctuation dropped,
+   so "Lucario-EX" = "Lucario EX" and "Pokémon Catcher" = "Pokemon Catcher". The product side
+   also strips its card number whatever the zero padding ("Lotad 063 107"), or just the card's
+   own part ("M Rayquaza EX 61"), alternating with the treatment strip, and matches if any
+   intermediate form fits. This took 2,915 more cards to an exact match with no existing match
+   lost or changed (diffed over every cached group).
 3. Log unmatched cards to a review queue. Promos and special subsets will need manual mapping.
+4. **Tagged products** (added 2026-10-25). TCGplayer sells a stamped or pattern printing as its
+   *own product* beside the card's base product, and reuses the same bracket syntax for plain
+   name disambiguation: "Aerodactyl (Delta Species)" is the card itself, "Exeggcute (Poke Ball
+   Pattern)" is an extra pack-pulled printing, "Pikachu - 027 (Prerelease)" is a stamp. Products
+   step 2 cannot pin down get a second pass (`match_tagged_products`), which classifies each tag
+   against the curated `data/printing_tags.yaml` (name tag / in-set printing / special printing)
+   and matches on the remaining name and number. Unknown tags are logged per set, never guessed.
+   The survey behind the file found this second pass prices 2,233 previously variant-less cards
+   (mostly name tags the exact matcher rejected) and adds ~1,100 tagged printings.
+5. **Edition groups** (added 2026-10-25). A tcgcsv group that is an extra print run of an
+   already-mapped set — so far only "Base Set (Shadowless)" (1663) for `base1` — is matched
+   against that set's cards with the group's own subTypeName mapping from
+   `data/printing_tags.yaml`. `bb ingest prices` with no options picks it up with every other
+   group; `--set base1` includes it after the primary group.
 
 Do not skip step 3. Silent mismatches produce confidently wrong prices, which is worse than a gap.
 

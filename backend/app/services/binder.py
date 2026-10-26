@@ -7,6 +7,7 @@ unique index on (binder_id, page_index, row, col) is only a backstop; this is th
 """
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
+from datetime import date
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
@@ -20,7 +21,16 @@ from app.binder.layout import (
     spread_pages,
     validate_placements,
 )
-from app.models import Binder, BinderPlacement, Card, CardVariant, CollectionItem
+from app.models import (
+    Binder,
+    BinderPlacement,
+    Card,
+    CardVariant,
+    CollectionItem,
+    Goal,
+    GoalItem,
+    Set,
+)
 from app.services.collection import get_or_create_default_collection
 
 LAYOUT_JSON_VERSION = 1
@@ -458,11 +468,64 @@ def write_placements(
     db.commit()
 
 
+@dataclass(slots=True)
+class SourceRow:
+    """One placeable variant from a layout source, with its set's position in release order."""
+
+    variant: CardVariant
+    card: Card
+    set_rank: int
+
+
+def layout_source(
+    db: Session,
+    *,
+    set_id: int | None = None,
+    goal_id: int | None = None,
+    canonical_only: bool = True,
+) -> list[SourceRow]:
+    """The cards an auto-layout draws from: a whole set, or exactly a goal's items.
+
+    Shared by every auto-layout mode, Michi included, so "lay out this goal" means the same pool
+    everywhere. `canonical_only` applies to sets only -- a goal already says which printings it
+    wants, and second-guessing it would drop the reverse holos from a master-set goal. Without
+    it a set yields its Master Set: every printing from its packs, but not the stamps and promo
+    printings (`is_special`), which only a Grand Master Set goal asks for.
+    """
+    if (set_id is None) == (goal_id is None):
+        raise ValueError("Lay out from exactly one of a set or a goal")
+
+    stmt = select(CardVariant, Card, Set).join(Card, CardVariant.card_id == Card.id).join(
+        Set, Card.set_id == Set.id
+    )
+    if goal_id is not None:
+        if db.get(Goal, goal_id) is None:
+            raise LookupError(f"Goal {goal_id} not found")
+        stmt = stmt.join(GoalItem, GoalItem.card_variant_id == CardVariant.id).where(
+            GoalItem.goal_id == goal_id
+        )
+    else:
+        stmt = stmt.where(Card.set_id == set_id)
+        if canonical_only:
+            stmt = stmt.where(CardVariant.is_canonical.is_(True))
+        else:
+            stmt = stmt.where(CardVariant.is_special.is_(False))
+    rows = db.execute(stmt).all()
+
+    by_release = sorted(
+        {s.id: s for _, _, s in rows}.values(),
+        key=lambda s: (s.release_date is None, s.release_date or date.min, s.id),
+    )
+    rank = {s.id: i for i, s in enumerate(by_release)}
+    return [SourceRow(variant, card, rank[s.id]) for variant, card, s in rows]
+
+
 def apply_auto_layout(
     db: Session,
     binder_id: int,
-    set_id: int,
+    set_id: int | None = None,
     *,
+    goal_id: int | None = None,
     mode: AutoLayoutMode = AutoLayoutMode.SET_ORDER,
     canonical_only: bool = True,
     skip_reverse_holos: bool = False,
@@ -470,51 +533,49 @@ def apply_auto_layout(
     start_subset_on_new_page: bool = False,
     replace: bool = True,
 ) -> AutoLayoutResult:
-    """Lay a set out into a binder. Replaces the existing layout unless `replace=False`.
+    """Lay a set or a goal out into a binder. Replaces the existing layout unless
+    `replace=False`.
 
     `canonical_only` mirrors the "owned" definition used elsewhere: one variant per card unless
-    the caller wants the master-set treatment with every printing placed separately.
+    the caller wants the master-set treatment with every printing placed separately. It does not
+    apply to goals; see `layout_source`.
     """
     binder = db.get(Binder, binder_id)
     if binder is None:
         raise LookupError(f"Binder {binder_id} not found")
 
-    stmt = (
-        select(CardVariant, Card)
-        .join(Card, CardVariant.card_id == Card.id)
-        .where(Card.set_id == set_id)
-    )
-    if canonical_only:
-        stmt = stmt.where(CardVariant.is_canonical.is_(True))
-    rows = db.execute(stmt).all()
-
+    rows = layout_source(db, set_id=set_id, goal_id=goal_id, canonical_only=canonical_only)
     cards = [
         LayoutCard(
-            card_variant_id=variant.id,
-            number=card.number,
-            number_sort=card.number_sort,
-            rarity=card.rarity,
-            variant=str(variant.variant),
+            card_variant_id=r.variant.id,
+            number=r.card.number,
+            number_sort=r.card.number_sort,
+            rarity=r.card.rarity,
+            variant=str(r.variant.variant),
+            set_rank=r.set_rank,
         )
-        for variant, card in rows
+        for r in rows
     ]
 
     # Cards nothing in `card_variant` points at. Counted with its own query rather than as
     # (cards in set - cards reached above), because that subtraction would also sweep in cards
     # merely filtered out by `canonical_only` -- a deliberate choice by the caller, not a data
     # gap, and telling someone to ingest prices they already have would be wrong. The caller
-    # otherwise has no way to tell "did not fit" from "was never placeable".
-    skipped_no_variant = (
-        db.execute(
-            select(func.count(Card.id)).where(
-                Card.set_id == set_id,
-                ~select(CardVariant.id)
-                .where(CardVariant.card_id == Card.id)
-                .exists(),
-            )
-        ).scalar_one()
-        or 0
-    )
+    # otherwise has no way to tell "did not fit" from "was never placeable". A goal holds
+    # variants by definition, so it has nothing to report here.
+    skipped_no_variant = 0
+    if set_id is not None:
+        skipped_no_variant = (
+            db.execute(
+                select(func.count(Card.id)).where(
+                    Card.set_id == set_id,
+                    ~select(CardVariant.id)
+                    .where(CardVariant.card_id == Card.id)
+                    .exists(),
+                )
+            ).scalar_one()
+            or 0
+        )
     placements = auto_layout(
         cards,
         binder,
