@@ -23,6 +23,7 @@ Never commit to `main`. One branch per slice, merged when its exit criteria are 
 | `feat/phase-3-binder-core` | Tasks 3.1–3.3, 3.5, 3.11–3.13 |
 | `feat/phase-3-binder-export` | Tasks 3.4, 3.9, 3.10 |
 | `feat/phase-3-binder-michi` | Tasks 3.6–3.8 |
+| `feat/phase-4-custom-goals` | Task 4.6 |
 
 Phase 1 is three branches rather than one on purpose. Set mapping (1.5–1.6) is research-shaped
 and will churn through many revisions; keeping it separate lets the schema and ingest work in
@@ -152,6 +153,7 @@ math per `docs/04-optimizer-spec.md`), `ingest/pullrates.py` (Pydantic structura
 DB-dependent rarity-existence check), and `bb goal create` / `bb goal need-list` / `bb sync
 pullrates` CLI commands. API at `/api/v1/goals`; UI at `/goals` and `/goals/:goalId` (set/
 master_set creation only -- a filter-builder UI is deferred, see `services/goals.py`'s docstring).
+*(Superseded by 4.6: the card search is the filter builder, and `custom` goals were added.)*
 Verified against the real ingested DB: `sv8` master-set goal → 411 needed cards, $1338.92 total
 (35 consolidated orders); plain `set` goal → 249 cards, $1177.47. Both confirmed rendering
 correctly in a real browser (Playwright), not just via the API. `bb sync pullrates` correctly
@@ -502,6 +504,113 @@ configured (the latter still unused). The Phase 1/2 design system is what the bi
 - [ ] 4.3 Multi-goal portfolio view.
 - [ ] 4.4 Japanese set support (TCGdex; different pack structures and published box odds).
 - [ ] 4.5 Community pull-rate contribution: log your own pack openings and update profile posteriors.
+- [x] 4.6 Card search, custom goals, and laying out a goal in a binder.
+- [ ] 4.7 Admin data-correction tooling (design first; see below).
+
+**4.7 Admin data correction — not started, design needed (owner request, 2026-10-25).** When the
+data is wrong (a misspelled card name, a wrong rarity or artist, a card linked to the wrong
+TCGplayer product, a printing that shouldn't exist), there must be a supported way to fix it
+without hand-editing rows in the database. It is for an admin-like persona and must **not** be
+exposed on the site.
+
+Why it isn't trivial: the ingests rewrite the catalogue. `bb ingest cards` upserts names, rarities
+and artists from pokemontcg.io, and `bb ingest prices` re-derives every `card_variant`, so a direct
+DB edit is silently undone on the next run. A correction therefore has to be stored as a durable
+*override* that the ingest applies, not as a one-off edit. The curated YAML registries already
+work this way (`data/set_map.yaml`, `data/sealed_map.yaml`, `data/printing_tags.yaml`), but they
+only cover set links, sealed products and printing tags.
+
+What it needs to do:
+- **Correct card fields** such as name, number, rarity, artist and Pokédex numbers, and have the
+  correction survive re-ingest.
+- **Fix product links:** force-link a card to a tcgcsv product (clearing a placeholder from the
+  low-confidence review queue), unlink a wrong match, add or remove a printing.
+- **Work through the review queues:** list low-confidence matches, unknown tags and placeholder
+  cards, and resolve them one at a time.
+- **Be safe:** preview a change before applying it (dry run), validate it, and keep it reversible.
+  Every override records what changed, why and when, so a corrected value stays traceable to its
+  source (CLAUDE.md rule 1: every number a user sees is traceable to a row or a file).
+- **Not on the site.** CLI first (a `bb admin ...` or `bb fix ...` sub-app), matching the rule that
+  every ingest capability is reachable from the CLI. A separate admin page is a possible later
+  step; the app has no auth today, so it must not be linked from, or reachable through, the
+  normal UI.
+
+Open questions to settle before building: overrides in git-tracked YAML (reviewable, like the
+existing registries) or in a DB table with an audit log (easier to edit, not in git); which fields
+are overridable; and whether a fix should also propose a general matcher rule when the same
+problem shows up across many cards, as with the `name_key` fix.
+
+**4.6 shipped (2026-10-25), branch `feat/phase-4-custom-goals`.** Goals no longer have to be a
+set. Owner request: any list of cards, built by searching on any attribute, with "every card of a
+Pokémon" / "every card by an artist" as templates, and laid out in the binder designer.
+
+- **One query builder, three callers.** `services/cards.py` (`CardQuery`) backs the search page
+  (`POST /cards/search`), `filter` goals (materialised through `variant_ids`), and the binder pool
+  for a goal. That is what guarantees a live goal holds exactly what the search showed. Filters:
+  name, set, era, rarity, card/energy/sub-type, illustrator, Pokédex number, printing, owned/missing,
+  price range, release years. `GET /cards/facets` lists every value with counts.
+- **"A Pokémon" means a Pokédex number, not a name.** "Mew" matches Mewtwo by name. Species names
+  are derived from single-species card names (shortest wins, so dex 25 is "Pikachu", not "Pikachu
+  ex"). The catalogue has no species table, so this is a heuristic; every name it produces is a real
+  card name. Tag-team cards match each of their species.
+- **`custom` goal type.** Its `goal_item` rows are the goal; resync leaves them alone. Rule-built
+  goals refuse hand edits (409) and are frozen with `convert-to-custom` first. See the table in
+  `docs/02-data-model.md`.
+- **Search matches variants, displays cards.** The unpriced chase cards (no `card_variant`, so
+  nothing to put in a goal or pocket) are counted as `unplaceable_count` and shown, not silently
+  dropped: 52 of the catalogue's 177 Pikachu cards.
+- **Binder.** `auto-layout` and `michi-layout` take `goal_id` as an alternative to `set_id`
+  (exactly one; 422 otherwise). Shared loader `services/binder.layout_source`; multi-set pools run
+  set by set in release order (`LayoutCard.set_rank`). The designer's pool has a set/goal toggle,
+  and a goal's detail page hands off to it with `/binders/:id?goal=:goalId`.
+- **Optimizer.** Unchanged, and still per set. `filter` and `custom` goals derive `set_id` when all
+  their cards share one set, so "Charizards in Obsidian Flames" can still be simulated; a multi-set
+  goal shows its singles cost and disables "Run optimizer".
+- **CLI.** `bb cards search <filters> [--save-goal NAME [--live]] [--add-to-goal ID]`,
+  `bb goal create --type custom`, `bb goal add-cards|remove-cards|convert|resync`,
+  `bb binder auto-layout|michi --goal ID`.
+
+**Follow-up on the same branch: tagged printings and the Grand Master Set.** Owner asked for an
+"every printing" view including stamps, a `grand_master_set` goal type that counts them, and a
+separate printing per Worlds year.
+
+- A survey of all 169 mapped tcgcsv groups found TCGplayer's bracket tags mean three different
+  things (name disambiguation, in-set pattern printings, stamps/promos), now curated in
+  `data/printing_tags.yaml` and applied by a second matching pass. See `docs/03-data-sources.md`
+  step 4 and the `card_variant` notes in `docs/02-data-model.md`.
+- New column `card_variant.is_special` (migration `d3a8f1c6b905`). Master Set = non-special
+  printings (so it now includes Poké Ball / Master Ball patterns); Grand Master Set = all.
+- Run over cached feed data against a copy of the real DB: +4,297 printings; cards with no
+  printing at all fell from 4,808 to 2,575; 86 special printings. Few Prerelease/Worlds stamps come
+  out *special* because nearly all of them only exist stamped, which makes the stamp the card.
+- **To apply to the real DB:** `alembic upgrade head`, then `bb ingest prices` (re-fetches from
+  tcgcsv; the matcher only runs at ingest time).
+- **Editions: 1st Edition, Unlimited, Shadowless.** WotC-era `1st Edition` / `Unlimited`
+  subTypeNames now map (`first_edition_normal`, new `unlimited_normal`), and the separate "Base
+  Set (Shadowless)" tcgcsv group (1663) is a curated *edition group* that adds `shadowless_*` and
+  `first_edition_*` printings to `base1` without replacing its primary group. Canonical now
+  prefers unlimited over 1st Edition. No migration (`variant` is text). Over the cached feed:
+  +1,515 printings; cards with no printing fell from 2,575 to 1,911. Re-run `bb ingest prices`
+  to apply; existing `set` goals pick up the new canonical printings on resync.
+- **Unpriced cards are no longer a blocker.** Every card with no printing gets an `unpriced`
+  placeholder `card_variant` (no product, so no price), so it can be searched, added to any goal
+  and laid out in a binder. The price ingest swaps it for the real printing when one appears,
+  carrying ownership, goal items and binder pockets across. Migration `e4b7c2a9d1f3` backfills the
+  existing 1,911 such cards; card ingest covers new ones. See `docs/02-data-model.md`.
+- **Most of those cards were matcher misses, now fixed.** A stricter name comparison
+  (`name_key`, see `docs/03-data-sources.md`) matched 2,915 more cards with no existing match
+  changed; placeholders fall from 1,911 to 373 on the next `bb ingest prices`. The UI now keeps a
+  known printing's name and says "Unpriced" in the price slot; only a true placeholder reads
+  "Printing unknown".
+- **The printing catalogue is not finished.** Rows still only exist where TCGplayer sells a
+  product, and several known gaps remain — tracked in `docs/07-data-backlog.md` §3a. Keep
+  building it out there before treating a Grand Master Set as complete.
+
+50 new tests (`test_service_cards.py`, `test_api_cards.py`, and additions to the goal and binder
+suites over a shared two-era fixture, `conftest.seed_catalogue`). Full suite: 407 passing. Checked
+against the real 20,479-card DB via the CLI, and end to end in headless Chromium against a *copy* of
+it: search → pick → save custom goal → add/remove → illustrator template (516-card live goal) →
+auto-layout and Michi from a goal. No console errors except a card image pokemontcg.io itself 404s.
 
 ---
 

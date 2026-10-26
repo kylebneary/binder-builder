@@ -47,10 +47,12 @@ extend-exclude = ["backend/migrations/versions"]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 
 # FastAPI's Depends()/Query()/etc. in argument defaults is the required pattern, not the B008
-# footgun that rule exists for (Typer's typer.Option() is the same story -- noqa'd inline since
-# there are only a couple of call sites, not enough to warrant a blanket exemption there too).
+# footgun that rule exists for. Typer's typer.Option() is the same story; it only trips B008 on
+# list-valued options, which were noqa'd inline until `bb cards search` added a dozen of them.
 [tool.ruff.lint.flake8-bugbear]
-extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body"]
+extend-immutable-calls = [
+    "fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body", "typer.Option",
+]
 
 [tool.mypy]
 python_version = "3.11"

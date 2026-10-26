@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ingest.base import CardDTO, CardSource, SetDTO
+from app.ingest.placeholders import ensure_placeholders
 from app.models import Card, Set
 
 log = logging.getLogger(__name__)
@@ -84,6 +85,8 @@ def ingest_sets_and_cards(
             set_row = _upsert_set(db, dto)
             for card_dto in cards:
                 _upsert_card(db, set_row, card_dto)
+            db.flush()
+            ensure_placeholders(db, set_row.id)
             db.commit()
             return SetIngestResult(dto.ptcg_set_id, len(cards))
         except Exception as exc:

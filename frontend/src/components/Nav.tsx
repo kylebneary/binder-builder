@@ -5,6 +5,7 @@ import ThemeToggle from "./ThemeToggle";
 
 const LINKS = [
   { to: "/", label: "Sets", end: true },
+  { to: "/cards", label: "Cards", end: false },
   { to: "/portfolio", label: "Portfolio", end: false },
   { to: "/goals", label: "Goals", end: false },
   { to: "/binders", label: "Binders", end: false },

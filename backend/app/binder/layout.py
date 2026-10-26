@@ -276,6 +276,9 @@ class LayoutCard:
     number_sort: int = 0
     rarity: str | None = None
     variant: str = "normal"
+    # Position of the card's set in release order. Always 0 for a single-set pool; a goal pool
+    # can span sets, and without this every set's #001 would land on the first page together.
+    set_rank: int = 0
 
     @property
     def subset(self) -> str:
@@ -334,7 +337,8 @@ def auto_layout(
     One generator serves both non-Michi modes; they differ only in sort key and in what
     forces a page break:
 
-    * SET_ORDER     -- `number_sort` order, optionally grouped by rarity within the set.
+    * SET_ORDER     -- `number_sort` order, optionally grouped by rarity within the set. A
+                       multi-set pool runs set by set in release order (`set_rank`).
     * RARITY_TIERED -- ascending rarity, a fresh page per tier, so chase cards land last.
 
     Deterministic for a given input: ties in the sort key fall back to the card number, so
@@ -346,11 +350,11 @@ def auto_layout(
         pool = [c for c in pool if c.variant != "reverse_holofoil"]
 
     if mode == AutoLayoutMode.RARITY_TIERED or group_by_rarity:
-        pool.sort(key=lambda c: (_rarity_rank(c.rarity), c.number_sort, c.number))
+        pool.sort(key=lambda c: (_rarity_rank(c.rarity), c.set_rank, c.number_sort, c.number))
     elif start_subset_on_new_page:
-        pool.sort(key=lambda c: (c.subset, c.number_sort, c.number))
+        pool.sort(key=lambda c: (c.set_rank, c.subset, c.number_sort, c.number))
     else:
-        pool.sort(key=lambda c: (c.number_sort, c.number))
+        pool.sort(key=lambda c: (c.set_rank, c.number_sort, c.number))
 
     break_key = _break_key(mode, group_by_rarity, start_subset_on_new_page)
     per_page = binder.rows * binder.cols

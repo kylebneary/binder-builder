@@ -5,9 +5,12 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
+from app.api.routers.cards import to_card_query
 from app.api.schemas import (
     GoalDetailOut,
     GoalIn,
+    GoalItemsEditIn,
+    GoalItemsEditOut,
     GoalOut,
     RankedStrategyOut,
     SensitivityIn,
@@ -20,7 +23,9 @@ from app.api.schemas import (
 )
 from app.models.enums import Condition, GoalType
 from app.services import goals as goals_service
+from app.services.cards import variant_ids
 from app.services.collection import get_or_create_default_collection
+from app.services.goals import GoalEditError, GoalTypeError
 from app.services.simulation_runs import run_search_and_cache, run_sensitivity
 from app.sim.optimizer import Objective
 from app.sim.types import CostParams, Strategy
@@ -40,14 +45,31 @@ def create_goal(body: GoalIn, db: Session = Depends(get_db)) -> GoalOut:
         target_condition = Condition(body.target_condition)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    goal = goals_service.create_goal(
-        db,
-        name=body.name,
-        goal_type=goal_type,
-        set_id=body.set_id,
-        filter_json=body.filter_json,
-        target_condition=target_condition,
-    )
+
+    filter_json = body.filter_json
+    card_variant_ids = list(body.card_variant_ids)
+    if body.query is not None:
+        query = to_card_query(body.query)
+        if goal_type == GoalType.FILTER:
+            filter_json = query.to_goal_filter()
+        elif goal_type == GoalType.CUSTOM:
+            # A snapshot: the search's matches as of now, ownership filter included -- "the
+            # Charizards I am missing today" is a fine fixed list, unlike a live one.
+            collection = get_or_create_default_collection(db)
+            card_variant_ids += variant_ids(db, query, collection_id=collection.id)
+
+    try:
+        goal = goals_service.create_goal(
+            db,
+            name=body.name,
+            goal_type=goal_type,
+            set_id=body.set_id,
+            filter_json=filter_json,
+            target_condition=target_condition,
+            card_variant_ids=card_variant_ids,
+        )
+    except GoalEditError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return GoalOut.model_validate(goal)
 
 
@@ -65,6 +87,45 @@ def delete_goal(goal_id: int, db: Session = Depends(get_db)) -> None:
     deleted = goals_service.delete_goal(db, goal_id)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Goal {goal_id} not found")
+
+
+@router.post("/{goal_id}/items", response_model=GoalItemsEditOut)
+def edit_goal_items(
+    goal_id: int, body: GoalItemsEditIn, db: Session = Depends(get_db)
+) -> GoalItemsEditOut:
+    """Add and remove cards on a custom goal. 409 for any other type -- see
+    services.goals.edit_goal_items for why rule-built goals refuse hand edits."""
+    add = list(body.add)
+    if body.add_query is not None:
+        collection = get_or_create_default_collection(db)
+        add += variant_ids(db, to_card_query(body.add_query), collection_id=collection.id)
+    try:
+        result = goals_service.edit_goal_items(db, goal_id, add=add, remove=body.remove)
+    except GoalTypeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except GoalEditError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"Goal {goal_id} not found")
+    return GoalItemsEditOut.model_validate(result)
+
+
+@router.post("/{goal_id}/convert-to-custom", response_model=GoalOut)
+def convert_goal_to_custom(goal_id: int, db: Session = Depends(get_db)) -> GoalOut:
+    goal = goals_service.convert_to_custom(db, goal_id)
+    if goal is None:
+        raise HTTPException(status_code=404, detail=f"Goal {goal_id} not found")
+    return GoalOut.model_validate(goal)
+
+
+@router.post("/{goal_id}/resync", response_model=GoalOut)
+def resync_goal(goal_id: int, db: Session = Depends(get_db)) -> GoalOut:
+    """Re-run a set or filter goal's rule, e.g. after ingesting a new set. A no-op for custom
+    goals."""
+    goal = goals_service.resync_goal(db, goal_id)
+    if goal is None:
+        raise HTTPException(status_code=404, detail=f"Goal {goal_id} not found")
+    return GoalOut.model_validate(goal)
 
 
 @router.post("/{goal_id}/simulate", response_model=SimulateResponseOut)

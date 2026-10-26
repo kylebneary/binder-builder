@@ -58,16 +58,59 @@ Index `(set_id, number_sort)`.
 |---|---|---|
 | id | PK | |
 | card_id | FK card | |
-| variant | enum | `normal`, `holofoil`, `reverse_holofoil`, `first_edition_normal`, `first_edition_holofoil`, `unlimited_holofoil`, `poke_ball_holo`, `master_ball_holo` |
-| tcgplayer_product_id | int null | |
+| variant | text(32) | a base printing from the `Variant` enum (`normal`, `holofoil`, `reverse_holofoil`, `first_edition_normal/_holofoil`, `unlimited_normal/_holofoil`, `shadowless_normal/_holofoil`, the `unpriced` placeholder, ...) **or** a tagged printing's slug from `data/printing_tags.yaml` (`poke_ball_holo`, `prerelease`, `cosmos_holo`, `worlds_2024`, ...) |
+| tcgplayer_product_id | int null | a tagged printing points at its own product, not the card's |
 | tcgplayer_sub_type_name | text null | verbatim from tcgcsv, e.g. `Reverse Holofoil` |
 | is_canonical | bool | the variant counted by a non-master set goal |
+| is_special | bool | stamp, promo foil, event or error printing: Grand Master Set only |
 
 Unique `(card_id, variant)`. Index `(tcgplayer_product_id, tcgplayer_sub_type_name)`.
 
 Which variants exist for a card is **derived from the price feed**, not assumed: create a variant
-for every `subTypeName` tcgcsv returns for that product ID. This handles era quirks (Pokéball and
-Masterball holo patterns in Prismatic Evolutions, 1st Edition in WotC sets) without special-casing.
+for every `subTypeName` tcgcsv returns for that product ID. This handles era quirks (1st Edition in
+WotC sets) without special-casing.
+
+**Unpriced placeholder.** A card the feed doesn't price (or the matcher can't pin down yet) still
+needs a row, because goals, binders and the collection all point at `card_variant`. Card ingest
+gives every card with no printing one `variant = 'unpriced'` row: no product id (so no price,
+shown as unpriced and never as $0), `is_canonical` true, `is_special` false. When the price ingest
+later derives real printings for the card, the placeholder is retired: collection items, goal
+items and binder pockets that pointed at it move to the card's canonical printing, then the row is
+deleted (`app/ingest/placeholders.py`). Migration `e4b7c2a9d1f3` backfilled existing cards.
+
+The UI separates *which printing* from *what it costs*: a printing the feed lists but hasn't
+priced keeps its real name ("1st Edition holo") and shows "Unpriced" where the price goes. Only
+the placeholder, where the printing itself isn't known, is named "Printing unknown".
+
+**Editions (WotC era).** Jungle through Neo Destiny price each card as `1st Edition` / `Unlimited`
+(non-holo) and `1st Edition Holofoil` / `Unlimited Holofoil`, giving `first_edition_*` and
+`unlimited_*` rows. Base Set is the exception: its primary tcgcsv group (604) is only the later,
+shadowed unlimited print (`normal` / `holofoil`), and TCGplayer sells 1st Edition and Shadowless
+as a separate *group*, "Base Set (Shadowless)" (1663). Such a group is listed under
+`edition_groups` in `data/printing_tags.yaml` with its own subTypeName mapping — there, `Unlimited`
+means `shadowless_normal` — and adds rows to the set's cards without becoming its
+`tcgplayer_group_id`. A Base Set card can therefore have up to five rows: `normal`/`holofoil`
+(shadowed), `shadowless_*`, `first_edition_*`.
+
+All edition printings are pulled from packs, so they are *not* `is_special`: a Master Set counts
+every edition, a plain Set goal counts the canonical one. Canonical preference is the plain print,
+then holo-only, then unlimited before 1st Edition (the copy a "complete the set" collector means);
+an edition group sets `is_canonical` only for a card the primary group never matched (Impostor
+Professor Oak), so the primary group's print otherwise stays canonical.
+
+Printings TCGplayer sells as **separate products** — Poké Ball / Master Ball patterns, prerelease
+and staff stamps, Cosmos holos, Worlds stamps — get one row each, keyed by the slug
+`data/printing_tags.yaml` assigns their name tag (see `docs/03-data-sources.md`, step 4). Two
+rules decide how they count:
+
+- **Scope.** `scope: set` printings come from the set's own packs and count toward a Master Set;
+  `scope: special` ones (`is_special`) count only toward a Grand Master Set. Stored on the row so
+  goal queries stay plain SQL rather than consulting the YAML.
+- **A stamp needs something to vary from.** If a card's *only* product is stamped — most
+  prerelease promos and Worlds-stamped trainers were only ever released that way — the stamped
+  product is the card's base printing, not a special one. So a Worlds stamp is a separate printing
+  per year (`worlds_2023`, `worlds_2024`) whenever a card has more than one, and simply the card
+  when it has one.
 
 ### `sealed_product`
 | Column | Type | Notes |
@@ -148,7 +191,7 @@ is what keeps two implementations of one rule honest.
 id, collection_id, sealed_product_id, quantity, acquired_price, acquired_on, is_opened.
 
 ### `goal` / `goal_item`
-`goal`: id, name, goal_type (`set`, `master_set`, `filter`), set_id null, filter_json,
+`goal`: id, name, goal_type (`set`, `master_set`, `grand_master_set`, `filter`, `custom`), set_id null, filter_json,
 target_condition, created_at.
 
 `goal_item`: goal_id, card_variant_id, required_qty (default 1).
@@ -156,6 +199,35 @@ target_condition, created_at.
 Materialise `goal_item` when the goal is created or the set is updated. Do not evaluate a filter on
 every read — the optimizer hits this table hundreds of thousands of times per simulation and it
 must be a plain join.
+
+The five types differ only in where `goal_item` comes from:
+
+| Type | Items come from | Resync |
+|---|---|---|
+| `set` | canonical variants of `set_id` | re-derived |
+| `master_set` | every non-special variant of `set_id` (pack printings) | re-derived |
+| `grand_master_set` | every variant of `set_id`, stamps and promos included | re-derived |
+| `filter` | `services/cards.py` run over `filter_json` | re-derived, so "every Pikachu" picks up new sets |
+| `custom` | hand edits (`POST /goals/{id}/items`) | **no-op**: the rows *are* the goal |
+
+`filter_json` keys are `CardQuery` field names (`pokedex_numbers`, `artists`, `types`, `subtypes`,
+`set_ids`, `rarities`, `variant_scope`, price and year bounds, ...). The singular keys older goals were
+saved with (`set_id`, `rarity`, `artist`, `supertype`) are still read. `owned` is never stored: a goal
+whose membership depended on ownership would shrink with every purchase and could never show
+progress.
+
+Only `custom` goals accept hand edits. A rule-built goal is converted first (`convert-to-custom`),
+which freezes its current items. Editing it in place would be silently undone by the next resync.
+
+For `filter` and `custom` goals `set_id` is **derived**: it is set when every item belongs to one
+set, otherwise null. The optimizer prices sealed product, which is per set, so a null `set_id` means
+the goal gets a singles cost and no optimizer run.
+
+**Matching JSON list columns.** `card.types`, `subtypes` and `national_pokedex_numbers` are JSON
+lists, and "contains X" has no spelling shared by SQLite (`json_each`) and Postgres (`@>`). The search
+matches the JSON *text* instead, with element boundaries (`[25]`, `[25,`, ` 25,`, ` 25]`), which is
+exact because these columns are always written as `json.dumps` output and Postgres' `JSON` type keeps
+text verbatim. Switching the columns to `JSONB` would break that and need a dialect-specific path.
 
 ### Pull-rate model
 `pull_rate_profile`: id, set_id, name, cards_per_pack, source_urls (JSON), sample_packs int null,

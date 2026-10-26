@@ -88,6 +88,12 @@ PRINTING_ALIASES: dict[str, Variant] = {
     "1st edition": Variant.FIRST_EDITION_NORMAL,
     "unlimited holofoil": Variant.UNLIMITED_HOLOFOIL,
     "unlimited holo": Variant.UNLIMITED_HOLOFOIL,
+    "unlimited normal": Variant.UNLIMITED_NORMAL,
+    "unlimited": Variant.UNLIMITED_NORMAL,
+    "shadowless holofoil": Variant.SHADOWLESS_HOLOFOIL,
+    "shadowless holo": Variant.SHADOWLESS_HOLOFOIL,
+    "shadowless normal": Variant.SHADOWLESS_NORMAL,
+    "shadowless": Variant.SHADOWLESS_NORMAL,
 }
 
 
