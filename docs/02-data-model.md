@@ -58,7 +58,7 @@ Index `(set_id, number_sort)`.
 |---|---|---|
 | id | PK | |
 | card_id | FK card | |
-| variant | text(32) | a base printing from the `Variant` enum (`normal`, `holofoil`, `reverse_holofoil`, `first_edition_normal/_holofoil`, `unlimited_normal/_holofoil`, `shadowless_normal/_holofoil`, ...) **or** a tagged printing's slug from `data/printing_tags.yaml` (`poke_ball_holo`, `prerelease`, `cosmos_holo`, `worlds_2024`, ...) |
+| variant | text(32) | a base printing from the `Variant` enum (`normal`, `holofoil`, `reverse_holofoil`, `first_edition_normal/_holofoil`, `unlimited_normal/_holofoil`, `shadowless_normal/_holofoil`, the `unpriced` placeholder, ...) **or** a tagged printing's slug from `data/printing_tags.yaml` (`poke_ball_holo`, `prerelease`, `cosmos_holo`, `worlds_2024`, ...) |
 | tcgplayer_product_id | int null | a tagged printing points at its own product, not the card's |
 | tcgplayer_sub_type_name | text null | verbatim from tcgcsv, e.g. `Reverse Holofoil` |
 | is_canonical | bool | the variant counted by a non-master set goal |
@@ -69,6 +69,14 @@ Unique `(card_id, variant)`. Index `(tcgplayer_product_id, tcgplayer_sub_type_na
 Which variants exist for a card is **derived from the price feed**, not assumed: create a variant
 for every `subTypeName` tcgcsv returns for that product ID. This handles era quirks (1st Edition in
 WotC sets) without special-casing.
+
+**Unpriced placeholder.** A card the feed doesn't price (or the matcher can't pin down yet) still
+needs a row, because goals, binders and the collection all point at `card_variant`. Card ingest
+gives every card with no printing one `variant = 'unpriced'` row: no product id (so no price,
+shown as unpriced and never as $0), `is_canonical` true, `is_special` false. When the price ingest
+later derives real printings for the card, the placeholder is retired: collection items, goal
+items and binder pockets that pointed at it move to the card's canonical printing, then the row is
+deleted (`app/ingest/placeholders.py`). Migration `e4b7c2a9d1f3` backfilled existing cards.
 
 **Editions (WotC era).** Jungle through Neo Destiny price each card as `1st Edition` / `Unlimited`
 (non-holo) and `1st Edition Holofoil` / `Unlimited Holofoil`, giving `first_edition_*` and
@@ -83,7 +91,8 @@ means `shadowless_normal` — and adds rows to the set's cards without becoming 
 All edition printings are pulled from packs, so they are *not* `is_special`: a Master Set counts
 every edition, a plain Set goal counts the canonical one. Canonical preference is the plain print,
 then holo-only, then unlimited before 1st Edition (the copy a "complete the set" collector means);
-an edition group never sets `is_canonical`, so the primary group's print stays canonical.
+an edition group sets `is_canonical` only for a card the primary group never matched (Impostor
+Professor Oak), so the primary group's print otherwise stays canonical.
 
 Printings TCGplayer sells as **separate products** — Poké Ball / Master Ball patterns, prerelease
 and staff stamps, Cosmos holos, Worlds stamps — get one row each, keyed by the slug

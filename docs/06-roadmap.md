@@ -558,6 +558,11 @@ separate printing per Worlds year.
   prefers unlimited over 1st Edition. No migration (`variant` is text). Over the cached feed:
   +1,515 printings; cards with no printing fell from 2,575 to 1,911. Re-run `bb ingest prices`
   to apply; existing `set` goals pick up the new canonical printings on resync.
+- **Unpriced cards are no longer a blocker.** Every card with no printing gets an `unpriced`
+  placeholder `card_variant` (no product, so no price), so it can be searched, added to any goal
+  and laid out in a binder. The price ingest swaps it for the real printing when one appears,
+  carrying ownership, goal items and binder pockets across. Migration `e4b7c2a9d1f3` backfills the
+  existing 1,911 such cards; card ingest covers new ones. See `docs/02-data-model.md`.
 - **The printing catalogue is not finished.** Rows still only exist where TCGplayer sells a
   product, and several known gaps remain — tracked in `docs/07-data-backlog.md` §3a. Keep
   building it out there before treating a Grand Master Set as complete.

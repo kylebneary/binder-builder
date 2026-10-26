@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.ingest.base import PricePointDTO, ProductDTO
 from app.ingest.mapping import match_cards_in_set, match_tagged_products
+from app.ingest.placeholders import retire_placeholders
 from app.ingest.printing_tags import EditionGroup, default_registry
 from app.ingest.sealed import upsert_sealed_products
 from app.ingest.tcgcsv import TcgCsvPriceSource
@@ -61,6 +62,8 @@ _CANONICAL_PREFERENCE = [
     Variant.HOLOFOIL,
     Variant.UNLIMITED_NORMAL,
     Variant.UNLIMITED_HOLOFOIL,
+    Variant.SHADOWLESS_NORMAL,
+    Variant.SHADOWLESS_HOLOFOIL,
     Variant.FIRST_EDITION_NORMAL,
     Variant.FIRST_EDITION_HOLOFOIL,
     Variant.REVERSE_HOLOFOIL,
@@ -237,6 +240,7 @@ def _derive_variants(
         )
 
     n_touched = 0
+    priced_card_ids: list[int] = []
     for ptcg_card_id in base.keys() | tagged.keys():
         card = cards_by_ptcg_id[ptcg_card_id]
         printings = _resolve_printings(
@@ -245,14 +249,25 @@ def _derive_variants(
         if not printings:
             continue
         canonical = _choose_canonical(printings)
+        # An edition group defers to the primary group's canonical printing -- unless the
+        # primary group never matched this card, which would leave it with none at all.
+        decides_canonical = edition_group is None or not db.scalar(
+            select(CardVariant.id).where(
+                CardVariant.card_id == card.id,
+                CardVariant.is_canonical.is_(True),
+                CardVariant.variant != Variant.UNPRICED,
+            )
+        )
         for p in printings:
             row = _upsert_card_variant(db, card.id, p.variant)
             row.tcgplayer_product_id = p.product_id
             row.tcgplayer_sub_type_name = p.sub_type_name
             row.is_special = p.is_special
-            if edition_group is None:
+            if decides_canonical:
                 row.is_canonical = p.variant == canonical
             n_touched += 1
+        priced_card_ids.append(card.id)
+    retire_placeholders(db, priced_card_ids)
     return n_touched
 
 

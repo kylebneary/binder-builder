@@ -719,9 +719,10 @@ export default function BinderDesignerPage() {
                     </p>
                     {autoLayout.data.skipped_no_variant > 0 && (
                       <Callout tone="warn">
-                        {autoLayout.data.skipped_no_variant} cards in this set have no priced
-                        variant, so nothing could be placed for them. Ingest this set&rsquo;s
-                        prices to pick them up.
+                        {autoLayout.data.skipped_no_variant} cards in this set have no printing
+                        row, so nothing could be placed for them. Run{" "}
+                        <code>alembic upgrade head</code> or re-ingest this set&rsquo;s cards to
+                        give them an unpriced placeholder.
                       </Callout>
                     )}
                   </>

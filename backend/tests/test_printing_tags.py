@@ -297,6 +297,28 @@ def test_edition_group_adds_shadowless_and_first_edition_without_moving_canonica
     }
 
 
+def test_edition_group_sets_canonical_when_the_primary_group_never_matched(db):
+    """Impostor Professor Oak: group 604 doesn't match it, so only 1663's printings exist."""
+    set_row = Set(ptcg_set_id="base1", name="Base")
+    db.add(set_row)
+    db.flush()
+    oak = Card(ptcg_card_id="base1-73", set_id=set_row.id, number="73", name="Impostor Oak")
+    db.add(oak)
+    db.flush()
+    _derive_variants(
+        db,
+        set_row,
+        [_product(1, "073/102", "Impostor Oak")],
+        {1: [_price(1, "1st Edition"), _price(1, "Unlimited")]},
+        REGISTRY.edition_groups[1663],
+    )
+    db.commit()
+    assert _variants(db, oak.id) == {
+        "first_edition_normal": (1, False, False),
+        "shadowless_normal": (1, False, True),
+    }
+
+
 def test_set_only_ingest_includes_the_sets_edition_groups(db):
     db.add(Set(ptcg_set_id="base1", name="Base", tcgplayer_group_id=604))
     db.flush()

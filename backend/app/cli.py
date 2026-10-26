@@ -438,8 +438,9 @@ def cards_search(
         console.print(f"{result.total} matching cards (showing {len(result.cards)}).")
         if result.unplaceable_count:
             console.print(
-                f"[yellow]{result.unplaceable_count} more match but have no priced variant, so "
-                "they cannot go in a goal or a binder yet.[/yellow]"
+                f"[yellow]{result.unplaceable_count} more match but have no printing row, so "
+                "they cannot go in a goal or a binder -- run `alembic upgrade head` or re-ingest "
+                "their sets' cards to give them an unpriced placeholder.[/yellow]"
             )
 
         if save_goal:
@@ -858,9 +859,9 @@ def binder_auto_layout(
         )
     if result.skipped_no_variant:
         console.print(
-            f"[yellow]{result.skipped_no_variant} cards in this set have no priced variant and "
-            "could not be placed at all -- ingest the set's prices to pick them up "
-            f"(`bb ingest prices --set {set_id}`).[/yellow]"
+            f"[yellow]{result.skipped_no_variant} cards in this set have no printing row and "
+            "could not be placed at all -- run `alembic upgrade head` or re-ingest the set's "
+            f"cards (`bb ingest cards --set {set_id}`) to give them a placeholder.[/yellow]"
         )
 
 

@@ -21,6 +21,10 @@ class Variant(StrEnum):
     SHADOWLESS_HOLOFOIL = "shadowless_holofoil"
     POKE_BALL_HOLO = "poke_ball_holo"
     MASTER_BALL_HOLO = "master_ball_holo"
+    # Placeholder for a card with no priced printing yet, so it can still go in a goal or a
+    # binder. Replaced by the real printing once the price feed has one; see
+    # app/ingest/placeholders.py.
+    UNPRICED = "unpriced"
 
 
 class Condition(StrEnum):

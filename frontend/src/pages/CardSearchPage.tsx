@@ -200,6 +200,7 @@ const VARIANT_LABELS: Record<string, string> = {
   shadowless_holofoil: "Shadowless holo",
   poke_ball_holo: "Poké Ball holo",
   master_ball_holo: "Master Ball holo",
+  unpriced: "Unpriced",
 };
 
 /** Base printings are named here; tagged printings carry their label from the server
@@ -641,8 +642,9 @@ export default function CardSearchPage() {
           {result && result.unplaceable_count > 0 && (
             <Callout>
               {result.unplaceable_count.toLocaleString()} more card
-              {result.unplaceable_count === 1 ? "" : "s"} match but have no priced printing yet,
-              so they cannot go in a goal or a binder. Ingesting prices for their sets picks them up.
+              {result.unplaceable_count === 1 ? "" : "s"} match but have no printing row, so they
+              cannot go in a goal or a binder. Run <code>alembic upgrade head</code> or re-ingest
+              their sets&rsquo; cards to give them an unpriced placeholder.
             </Callout>
           )}
           {notice && <Callout tone="accent">{notice}</Callout>}
