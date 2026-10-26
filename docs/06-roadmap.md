@@ -505,6 +505,40 @@ configured (the latter still unused). The Phase 1/2 design system is what the bi
 - [ ] 4.4 Japanese set support (TCGdex; different pack structures and published box odds).
 - [ ] 4.5 Community pull-rate contribution: log your own pack openings and update profile posteriors.
 - [x] 4.6 Card search, custom goals, and laying out a goal in a binder.
+- [ ] 4.7 Admin data-correction tooling (design first; see below).
+
+**4.7 Admin data correction — not started, design needed (owner request, 2026-10-25).** When the
+data is wrong (a misspelled card name, a wrong rarity or artist, a card linked to the wrong
+TCGplayer product, a printing that shouldn't exist), there must be a supported way to fix it
+without hand-editing rows in the database. It is for an admin-like persona and must **not** be
+exposed on the site.
+
+Why it isn't trivial: the ingests rewrite the catalogue. `bb ingest cards` upserts names, rarities
+and artists from pokemontcg.io, and `bb ingest prices` re-derives every `card_variant`, so a direct
+DB edit is silently undone on the next run. A correction therefore has to be stored as a durable
+*override* that the ingest applies, not as a one-off edit. The curated YAML registries already
+work this way (`data/set_map.yaml`, `data/sealed_map.yaml`, `data/printing_tags.yaml`), but they
+only cover set links, sealed products and printing tags.
+
+What it needs to do:
+- **Correct card fields** such as name, number, rarity, artist and Pokédex numbers, and have the
+  correction survive re-ingest.
+- **Fix product links:** force-link a card to a tcgcsv product (clearing a placeholder from the
+  low-confidence review queue), unlink a wrong match, add or remove a printing.
+- **Work through the review queues:** list low-confidence matches, unknown tags and placeholder
+  cards, and resolve them one at a time.
+- **Be safe:** preview a change before applying it (dry run), validate it, and keep it reversible.
+  Every override records what changed, why and when, so a corrected value stays traceable to its
+  source (CLAUDE.md rule 1: every number a user sees is traceable to a row or a file).
+- **Not on the site.** CLI first (a `bb admin ...` or `bb fix ...` sub-app), matching the rule that
+  every ingest capability is reachable from the CLI. A separate admin page is a possible later
+  step; the app has no auth today, so it must not be linked from, or reachable through, the
+  normal UI.
+
+Open questions to settle before building: overrides in git-tracked YAML (reviewable, like the
+existing registries) or in a DB table with an audit log (easier to edit, not in git); which fields
+are overridable; and whether a fix should also propose a general matcher rule when the same
+problem shows up across many cards, as with the `name_key` fix.
 
 **4.6 shipped (2026-10-25), branch `feat/phase-4-custom-goals`.** Goals no longer have to be a
 set. Owner request: any list of cards, built by searching on any attribute, with "every card of a

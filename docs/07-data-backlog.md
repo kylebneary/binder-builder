@@ -157,6 +157,9 @@ Halloween promo bundle product, not something to build a pull-rate profile for.
       follow-up but deliberately not bundled into this pass since they're a different kind of
       change (core normalization, not a treatment-suffix whitelist) and deserve their own
       verification.
+- [ ] **Fixing one-off data errors still means editing the database by hand**, and the next
+      ingest undoes it. Planned as admin data-correction tooling (CLI, not on the site); see
+      `docs/06-roadmap.md` 4.7. Many of the gaps below are the kind of thing it would fix.
 - [ ] **3a. The printing (variant) catalogue needs continued build-out.** Owner's standing ask
       (2026-10-25): keep extending the database until every real printing of a card is a
       `card_variant` row, so Master and Grand Master Set goals are complete. Done so far: base
