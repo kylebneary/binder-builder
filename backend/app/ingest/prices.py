@@ -7,6 +7,7 @@ pairing in `bb ingest prices` (app/cli.py), which is a manual, one-off way to de
 until the general fuzzy set-name matcher (data/set_map.yaml, phase 1.5) exists.
 """
 import logging
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
@@ -16,7 +17,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ingest.base import PricePointDTO, ProductDTO
-from app.ingest.mapping import match_cards_in_set
+from app.ingest.mapping import match_cards_in_set, match_tagged_products
+from app.ingest.printing_tags import default_registry
 from app.ingest.sealed import upsert_sealed_products
 from app.ingest.tcgcsv import TcgCsvPriceSource
 from app.models import Card, CardVariant, PricePoint, Set
@@ -95,7 +97,7 @@ def _upsert_price_point(db: Session, dto: PricePointDTO) -> None:
     row.currency = dto.currency
 
 
-def _upsert_card_variant(db: Session, card_id: int, variant: Variant) -> CardVariant:
+def _upsert_card_variant(db: Session, card_id: int, variant: str) -> CardVariant:
     row = db.execute(
         select(CardVariant).where(CardVariant.card_id == card_id, CardVariant.variant == variant)
     ).scalar_one_or_none()
@@ -105,55 +107,177 @@ def _upsert_card_variant(db: Session, card_id: int, variant: Variant) -> CardVar
     return row
 
 
+@dataclass(slots=True)
+class _Printing:
+    """One printing a card will get: what it is called, which (product, subType) prices it."""
+
+    variant: str
+    product_id: int
+    sub_type_name: str
+    is_special: bool
+
+
+def _base_printings(product_id: int, prices: list[PricePointDTO], card_id: str) -> list[_Printing]:
+    """A card's own product: one printing per recognised subTypeName."""
+    out: list[_Printing] = []
+    for price in prices:
+        variant = SUBTYPE_TO_VARIANT.get(price.sub_type_name)
+        if variant is None:
+            log.warning(
+                "Unrecognized subTypeName %r for product %s (card %s) -- skipping",
+                price.sub_type_name,
+                product_id,
+                card_id,
+            )
+            continue
+        out.append(_Printing(variant.value, product_id, price.sub_type_name, is_special=False))
+    return out
+
+
 def _derive_variants(
     db: Session,
     set_row: Set,
     products: list[ProductDTO],
     prices_by_product: dict[int, list[PricePointDTO]],
 ) -> int:
+    """Derive card_variant rows for a set from its products, in two passes.
+
+    1. `match_cards_in_set`: each card's own, untagged product.
+    2. `match_tagged_products`: products whose names carry bracketed tags. A name-tag product
+       ("Aerodactyl (Delta Species)") is the card's own product too; a printing-tag product
+       ("Exeggcute (Poke Ball Pattern)", "Pikachu - 027 (Prerelease)") is an extra printing,
+       keyed by its slug from data/printing_tags.yaml.
+
+    Printings are gathered per card before anything is written, so the canonical printing is
+    chosen from everything the card has, and a second product claiming a printing the card
+    already has is reported rather than silently overwriting the first.
+    """
     cards = list(db.execute(select(Card).where(Card.set_id == set_row.id)).scalars())
     cards_by_ptcg_id = {c.ptcg_card_id: c for c in cards}
-    matches = match_cards_in_set(cards, products)
+    registry = default_registry()
 
-    n_touched = 0
-    for m in matches:
+    base: dict[str, list[_Printing]] = {}
+    tagged: dict[str, list[_Printing]] = {}
+    matched_products: set[int] = set()
+    low_confidence: dict[str, str] = {}
+    for m in match_cards_in_set(cards, products):
         if m.tcgplayer_product_id is None or m.confidence < 1.0:
             if m.confidence < 1.0:
-                log.warning(
-                    "Skipping variant derivation for card %s: %s (confidence %.1f)",
-                    m.ptcg_card_id,
-                    m.reason,
-                    m.confidence,
-                )
+                low_confidence[m.ptcg_card_id] = m.reason
             continue
-
-        card = cards_by_ptcg_id[m.ptcg_card_id]
-        present: list[tuple[Variant, str]] = []
-        for price in prices_by_product.get(m.tcgplayer_product_id, []):
-            variant = SUBTYPE_TO_VARIANT.get(price.sub_type_name)
-            if variant is None:
-                log.warning(
-                    "Unrecognized subTypeName %r for product %s (card %s) -- skipping",
-                    price.sub_type_name,
-                    m.tcgplayer_product_id,
-                    card.ptcg_card_id,
-                )
-                continue
-            present.append((variant, price.sub_type_name))
-        if not present:
-            continue
-
-        present_variants = {v for v, _ in present}
-        canonical = next(
-            (v for v in _CANONICAL_PREFERENCE if v in present_variants), present[0][0]
+        matched_products.add(m.tcgplayer_product_id)
+        base.setdefault(m.ptcg_card_id, []).extend(
+            _base_printings(
+                m.tcgplayer_product_id,
+                prices_by_product.get(m.tcgplayer_product_id, []),
+                m.ptcg_card_id,
+            )
         )
-        for variant, sub_type_name in present:
-            row = _upsert_card_variant(db, card.id, variant)
-            row.tcgplayer_product_id = m.tcgplayer_product_id
-            row.tcgplayer_sub_type_name = sub_type_name
-            row.is_canonical = variant == canonical
+
+    tagged_matches, unresolved = match_tagged_products(
+        cards, products, matched_products, registry
+    )
+    for tm in tagged_matches:
+        prices = prices_by_product.get(tm.tcgplayer_product_id, [])
+        if tm.printing is None:
+            base.setdefault(tm.ptcg_card_id, []).extend(
+                _base_printings(tm.tcgplayer_product_id, prices, tm.ptcg_card_id)
+            )
+            continue
+        if len(prices) != 1:
+            # A tagged printing is one product with one finish in every observed case; more
+            # than one subType would need a second slug per finish, so report it instead.
+            if prices:
+                log.warning(
+                    "Tagged printing %r (product %s) has %d subTypes -- skipping",
+                    tm.printing.slug,
+                    tm.tcgplayer_product_id,
+                    len(prices),
+                )
+            continue
+        tagged.setdefault(tm.ptcg_card_id, []).append(
+            _Printing(
+                tm.printing.slug,
+                tm.tcgplayer_product_id,
+                prices[0].sub_type_name,
+                is_special=tm.printing.is_special,
+            )
+        )
+
+    for ptcg_card_id, reason in low_confidence.items():
+        if ptcg_card_id not in base:
+            log.warning("Skipping variant derivation for card %s: %s", ptcg_card_id, reason)
+    if unresolved:
+        unknown = Counter(t for u in unresolved for t in u.unknown_tags)
+        log.warning(
+            "Set %s: %d tagged products left unmatched (%s). Unknown tags: %s -- add them to "
+            "data/printing_tags.yaml if they are real printings.",
+            set_row.ptcg_set_id,
+            len(unresolved),
+            ", ".join(f"{r}: {n}" for r, n in Counter(u.reason for u in unresolved).items()),
+            ", ".join(f"{t!r} x{n}" for t, n in unknown.most_common(10)) or "none",
+        )
+
+    n_touched = 0
+    for ptcg_card_id in base.keys() | tagged.keys():
+        card = cards_by_ptcg_id[ptcg_card_id]
+        printings = _resolve_printings(
+            ptcg_card_id, base.get(ptcg_card_id, []), tagged.get(ptcg_card_id, [])
+        )
+        if not printings:
+            continue
+        canonical = _choose_canonical(printings)
+        for p in printings:
+            row = _upsert_card_variant(db, card.id, p.variant)
+            row.tcgplayer_product_id = p.product_id
+            row.tcgplayer_sub_type_name = p.sub_type_name
+            row.is_special = p.is_special
+            row.is_canonical = p.variant == canonical
             n_touched += 1
     return n_touched
+
+
+def _resolve_printings(
+    ptcg_card_id: str, base: list[_Printing], tagged: list[_Printing]
+) -> list[_Printing]:
+    """One printing per variant name, base printings first.
+
+    A special printing is only a variant when there is an unstamped card to vary from. Many
+    promos were only ever released stamped, so when a card has no base printing and exactly one
+    special product, that product IS the card: it is re-read as the card's base printing.
+    """
+    if not base and len(tagged) == 1 and tagged[0].is_special:
+        only = tagged[0]
+        variant = SUBTYPE_TO_VARIANT.get(only.sub_type_name)
+        if variant is not None:
+            tagged = []
+            base = [_Printing(variant.value, only.product_id, only.sub_type_name, False)]
+
+    out: dict[str, _Printing] = {}
+    for p in [*base, *tagged]:
+        if p.variant in out:
+            if out[p.variant].product_id != p.product_id:
+                log.warning(
+                    "Card %s: printing %r claimed by products %s and %s -- keeping the first",
+                    ptcg_card_id,
+                    p.variant,
+                    out[p.variant].product_id,
+                    p.product_id,
+                )
+            continue
+        out[p.variant] = p
+    return list(out.values())
+
+
+def _choose_canonical(printings: list[_Printing]) -> str:
+    """Prefer the plain print, then holo-only prints (see _CANONICAL_PREFERENCE); a tagged
+    printing is never canonical unless it is all the card has."""
+    present = {p.variant for p in printings}
+    for variant in _CANONICAL_PREFERENCE:
+        if variant.value in present:
+            return variant.value
+    plain = [p for p in printings if not p.is_special]
+    return (plain or printings)[0].variant
 
 
 def resolve_group_set_pairs(

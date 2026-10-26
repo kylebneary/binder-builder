@@ -9,6 +9,10 @@ export interface VariantOut {
   is_canonical: boolean;
   market_price: string | null;
   owned_quantity: number;
+  /** A stamp or promo printing: counted by a Grand Master Set, not a Master Set. */
+  is_special?: boolean;
+  /** Collector-facing name for a tagged printing ("Prerelease stamp"); null for base ones. */
+  label?: string | null;
 }
 
 export interface CardOut {
@@ -156,6 +160,7 @@ export interface CardSearchOut {
 export interface FacetValue {
   value: string;
   count: number;
+  label?: string | null;
 }
 
 export interface SpeciesFacet {
@@ -175,7 +180,7 @@ export interface CardFacetsOut {
   species: SpeciesFacet[];
 }
 
-export type GoalType = "set" | "master_set" | "filter" | "custom";
+export type GoalType = "set" | "master_set" | "grand_master_set" | "filter" | "custom";
 
 export interface GoalIn {
   name: string;
@@ -221,6 +226,7 @@ export interface NeedItemOut {
   set_name: string;
   ptcg_set_id: string;
   image_small: string | null;
+  variant_label?: string | null;
 }
 
 export interface SinglesCostOut {

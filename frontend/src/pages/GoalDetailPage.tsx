@@ -32,6 +32,7 @@ import {
 const TYPE_LABEL: Record<string, string> = {
   set: "set",
   master_set: "master set",
+  grand_master_set: "grand master set",
   filter: "live filter",
   custom: "custom list",
 };
@@ -196,8 +197,12 @@ export default function GoalDetailPage() {
               </div>
             ) : (
               <span className="text-[12.5px] text-ink-2">
-                Built from {goal.goal_type === "master_set" ? "every printing in" : "every card in"}{" "}
-                the set.
+                Built from{" "}
+                {goal.goal_type === "grand_master_set"
+                  ? "every printing in the set, stamps and promos included."
+                  : goal.goal_type === "master_set"
+                    ? "every printing pulled from the set's packs."
+                    : "every card in the set."}
               </span>
             )}
             <div className="flex-1" />
@@ -316,7 +321,9 @@ export default function GoalDetailPage() {
               <Td className="font-mono text-[11.5px] text-accent-text">{item.number}</Td>
               <Td className="font-medium text-ink">{item.card_name}</Td>
               {multiSet && <Td className="text-ink-3">{item.set_name}</Td>}
-              <Td className="text-ink-3">{item.variant.replace(/_/g, " ")}</Td>
+              <Td className="text-ink-3">
+                {item.variant_label ?? item.variant.replace(/_/g, " ")}
+              </Td>
               <Td className="text-ink-3">{item.rarity ?? "—"}</Td>
               <Td className="text-right font-mono text-[12px]">
                 {formatMoney(item.market_price)}

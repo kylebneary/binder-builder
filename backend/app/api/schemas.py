@@ -17,6 +17,8 @@ class VariantOut(BaseModel):
     is_canonical: bool
     market_price: Decimal | None
     owned_quantity: int
+    is_special: bool = False
+    label: str | None = None
 
 
 class CardOut(BaseModel):
@@ -187,6 +189,7 @@ class FacetValueOut(BaseModel):
 
     value: str
     count: int
+    label: str | None = None
 
 
 class SpeciesFacetOut(BaseModel):
@@ -264,6 +267,7 @@ class NeedItemOut(BaseModel):
     set_name: str
     ptcg_set_id: str
     image_small: str | None
+    variant_label: str | None = None
 
 
 class SinglesCostOut(BaseModel):

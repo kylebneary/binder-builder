@@ -1,0 +1,185 @@
+# What the bracketed tags in tcgcsv product names mean -- "Pikachu - 027 (Prerelease)",
+# "Aerodactyl (Delta Species)", "Exeggcute (Poke Ball Pattern)".
+#
+# TCGplayer sells a stamped or pattern printing as its OWN product, separate from the card's base
+# product, and also uses the same bracket syntax for plain disambiguation. The price ingest
+# (app/ingest/prices.py) reads this file to tell the three apart; a tag not listed here is logged
+# and the product is left unmatched -- never guessed. Every entry below was observed in the live
+# feed in the 2026-10-25 survey of all 169 mapped groups (counts are products that tag landed on
+# a known card); add new tags here when `bb ingest prices` reports them.
+#
+# Kinds:
+#   name_tags   Part of the card's identity, not a printing: "Aerodactyl (Delta Species)" is
+#               simply the card Aerodactyl delta species. Stripped before matching; the product
+#               then supplies the card's ordinary Normal / Holo / Reverse printings.
+#   printings   A distinct printing of a card that also has an untagged version. Each becomes its
+#               own card_variant, keyed by `slug`, with its own product id and price.
+#                 scope: set      pulled from packs of the set itself -> part of a Master Set
+#                 scope: special  stamps, promos, events, errors     -> Grand Master Set only
+#   patterns    Like printings, for tags carrying a year or placement. Each distinct value is a
+#               SEPARATE printing ("Worlds 2023" and "Worlds 2024" are different cards to a
+#               collector). `{year}` is normalised to four digits.
+#
+# A special printing is only a variant when there is an unstamped version to vary from. When a
+# card's ONLY product carries a special tag (many promos were only ever released stamped), that
+# product is treated as the card's base printing instead -- see prices.py.
+#
+# Lookup is case-insensitive. A tag is tried as written, then with a leading number removed
+# ("98 Full Art" -> "Full Art", "151 Metal Card" -> "Metal Card"). Two printing tags on one
+# product ("(Prerelease) (Staff)") are looked up joined with " + ".
+
+name_tags:
+  - Delta Species          # 179, EX era
+  - Delta                  # "8 Delta", XY Fates Collide
+  - Team Plasma            # 84, BW Plasma sets
+  - Prime                  # 31, HGSS
+  - Shiny                  # 25
+  - Special                # Special energy, 18
+  - Basic                  # Basic energy
+  - Secret                 # 17
+  - Secret Rare
+  - Full Art               # 9, plus numbered "98 Full Art" etc.
+  - Alternate Full Art
+  - Full Art Secret Rare
+  - Shiny Full Art
+  - Texture Full Art       # Crown Zenith energies
+  - Full Art Promo         # XY promos
+  - Holo Common            # Detective Pikachu holo commons
+  - Holo                   # POP series ex: separate holo product
+  - Non-Holo               # POP series ex: separate non-holo product
+  - Alpha                  # Primal Clash
+  - Omega
+  - Top                    # HGSS LEGEND halves
+  - Bottom
+  - Supporter              # "N (Supporter)"
+  - Rocket's Secret Machine
+  - Goldenrod Game Corner
+  - Red                    # Gyarados (Red), HGSS
+  - High Plains [Orange]   # Vivillon forms
+  - Meadow [Pink]
+  - Attack Forme           # Deoxys / Shaymin formes
+  - Defense Forme
+  - Normal Forme
+  - Speed Forme
+  - Land Forme
+  - Sky Forme
+  - Delta Species - Attack Forme
+  - Delta Species - Defense Forme
+  - Delta Species - Normal Forme
+  - Delta Species - Speed Forme
+  # Ditto disguises, EX FireRed & LeafGreen
+  - Bulbasaur
+  - Charmander
+  - Squirtle
+  - Pikachu
+  - Mr. Mime
+  - Geodude
+  # Gym Badge trainers, XY promos
+  - Brock
+  - Misty
+  - Lt. Surge
+  - Erika
+  - Koga
+  - Sabrina
+  - Blaine
+  - Giovanni
+
+# Regex name tags: Unown letters "(A)".."(Z)", "(!)", "(?)"; e-Card holo numbers "(H1)".."(H32)";
+# bare number disambiguators "(002)".
+name_tag_patterns:
+  - '^[a-z!?]$'
+  - '^h\d+$'
+  - '^\d+[a-z]?$'
+
+printings:
+  # --- in-set pattern printings (Master Set) ---------------------------------------------------
+  - {tag: Poke Ball Pattern, slug: poke_ball_holo, label: Poké Ball pattern, scope: set,
+     aliases: [Poke Ball]}                                  # 253 Prismatic/SV10.5; 34 Ascended Heroes
+  - {tag: Master Ball Pattern, slug: master_ball_holo, label: Master Ball pattern, scope: set}  # 211
+  - {tag: Energy Symbol Pattern, slug: energy_symbol_holo, label: Energy symbol pattern, scope: set}  # 140
+  - {tag: Dusk Ball, slug: dusk_ball_holo, label: Dusk Ball pattern, scope: set}
+  - {tag: Love Ball, slug: love_ball_holo, label: Love Ball pattern, scope: set}
+  - {tag: Friend Ball, slug: friend_ball_holo, label: Friend Ball pattern, scope: set}
+  - {tag: Quick Ball, slug: quick_ball_holo, label: Quick Ball pattern, scope: set}
+  - {tag: Team Rocket, slug: team_rocket_holo, label: Team Rocket pattern, scope: set}
+  - {tag: Peelable Ditto, slug: peelable_ditto, label: Peelable Ditto, scope: set}  # Pokémon GO
+
+  # --- stamps, promo foils, events (Grand Master Set) ------------------------------------------
+  - {tag: Prerelease, slug: prerelease, label: Prerelease stamp, scope: special,
+     aliases: [XY Steam Siege Prerelease, XY Evolutions Prerelease]}  # 126
+  - {tag: Staff, slug: staff, label: Staff stamp, scope: special}
+  - {tag: Prerelease + Staff, slug: prerelease_staff, label: Prerelease Staff stamp,
+     scope: special, aliases: [Prerelease Staff]}
+  - {tag: Cosmos Holo, slug: cosmos_holo, label: Cosmos holo, scope: special,
+     aliases: [Cosmo Holo, Cosmo Holofoil, Cosmos Holofoil]}         # 45 + 6 misspelled
+  - {tag: Cracked Ice Holo, slug: cracked_ice_holo, label: Cracked ice holo, scope: special}
+  - {tag: Tinsel Holo, slug: tinsel_holo, label: Tinsel holo, scope: special}
+  - {tag: Pokemon Center Exclusive, slug: pokemon_center, label: Pokémon Center stamp,
+     scope: special, aliases: [Pokémon Center Exclusive, Pokemon Center]}
+  - {tag: e-League, slug: e_league, label: e-League stamp, scope: special}
+  - {tag: Target Promo, slug: target_promo, label: Target promo, scope: special}
+  - {tag: Target Non-Holo, slug: target_non_holo, label: Target non-holo, scope: special}
+  - {tag: In-Store Event Promo, slug: in_store_event, label: In-store event promo, scope: special}
+  - {tag: Detective Pikachu Stamped, slug: detective_pikachu_stamp,
+     label: Detective Pikachu stamp, scope: special}
+  - {tag: Stamped, slug: stamped, label: Stamped, scope: special}
+  - {tag: Pokemon Day Stamped, slug: pokemon_day, label: Pokémon Day stamp, scope: special,
+     aliases: [Pokemon Day 2009]}
+  - {tag: 25th Anniversary Stamp, slug: anniversary_25, label: 25th Anniversary stamp,
+     scope: special}
+  - {tag: Holiday Calendar, slug: holiday_calendar, label: Holiday Calendar, scope: special}
+  - {tag: Movie Promo, slug: movie_promo, label: Movie promo, scope: special}
+  - {tag: Non-Holo Movie Exclusive, slug: movie_non_holo, label: Movie exclusive non-holo,
+     scope: special}
+  - {tag: SNAP Promo, slug: snap_promo, label: Pokémon Snap promo, scope: special}
+  - {tag: Glossy Finish, slug: glossy, label: Glossy finish, scope: special}
+  - {tag: Black Dot Error, slug: black_dot_error, label: Black dot error, scope: special}
+  - {tag: Misprint, slug: misprint, label: Misprint, scope: special}
+  - {tag: Metal Card, slug: metal_card, label: Metal card, scope: special}
+  - {tag: "Let's Play, Eevee!", slug: lets_play_eevee, label: "Let's Play Eevee promo",
+     scope: special}
+  - {tag: Collector Chest, slug: collector_chest, label: Collector Chest, scope: special}
+  - {tag: EX Deck Tin, slug: ex_deck_tin, label: EX deck tin, scope: special}
+  - {tag: EX Collector's Tins, slug: collector_tin, label: Collector's tin, scope: special,
+     aliases: ["EX Collector's Tin", "EX Collector's Window Tins", "EX Collector's Carry Tin",
+               "EX Series Collector's Tin"]}
+  - {tag: Nintendo Power Magazine, slug: nintendo_power, label: Nintendo Power, scope: special}
+  - {tag: "Pokemon Heroes: Latios & Latias DVD Release", slug: dvd_release, label: DVD release,
+     scope: special, aliases: ["Jirachi: Wish Maker DVD Release"]}
+  - {tag: EX Series Value Pack, slug: value_pack, label: Value pack, scope: special,
+     aliases: [Value Pack, Epic Collection Value Boxes]}
+  - {tag: "Trainer's Challenge Set", slug: trainers_challenge, label: "Trainer's Challenge",
+     scope: special}
+  - {tag: POP Tournament, slug: pop_tournament, label: POP tournament, scope: special}
+  - {tag: Stadium Challenge 2004, slug: stadium_challenge_2004, label: Stadium Challenge 2004,
+     scope: special}
+  - {tag: JR East Stamp Rally, slug: jr_east_stamp_rally, label: JR East stamp rally,
+     scope: special}
+  - {tag: Asia Championship Series 23-24, slug: asia_championship_2024,
+     label: Asia Championship 2023-24, scope: special}
+
+patterns:
+  # Worlds stamps -- one printing per year, as the owner asked. All three spellings occur.
+  - {regex: '^(?:worlds|world championships?) (?P<year>\d{2}|\d{4})$', slug: 'worlds_{year}',
+     label: 'Worlds {year} stamp', scope: special}
+  - {regex: '^(?P<year>\d{4}) world championships$', slug: 'worlds_{year}',
+     label: 'Worlds {year} stamp', scope: special}
+  # Champions Festival placement stamps (XY era), one printing per year AND placement.
+  - {regex: '^(?P<year>\d{4}) top thirty-two$', slug: 'worlds_{year}_top_32',
+     label: 'Worlds {year} Top 32', scope: special}
+  - {regex: '^(?P<year>\d{4}) top sixteen$', slug: 'worlds_{year}_top_16',
+     label: 'Worlds {year} Top 16', scope: special}
+  - {regex: '^(?P<year>\d{4}) quarter finalist$', slug: 'worlds_{year}_quarterfinal',
+     label: 'Worlds {year} Quarter-finalist', scope: special}
+  - {regex: '^(?P<year>\d{4}) semi-finalist$', slug: 'worlds_{year}_semifinal',
+     label: 'Worlds {year} Semi-finalist', scope: special}
+  - {regex: '^(?P<year>\d{4}) finalist$', slug: 'worlds_{year}_finalist',
+     label: 'Worlds {year} Finalist', scope: special}
+  - {regex: '^(?P<year>\d{4}) champion$', slug: 'worlds_{year}_champion',
+     label: 'Worlds {year} Champion', scope: special}
+  - {regex: '^(?P<year>\d{4}) staff$', slug: 'worlds_{year}_staff', label: 'Worlds {year} Staff',
+     scope: special}
+  - {regex: '^illustration contest (?P<year>\d{4})$', slug: 'illustration_contest_{year}',
+     label: 'Illustration Contest {year}', scope: special}
+  - {regex: '^battle road (?P<season>autumn|spring) (?P<year>\d{4})$', slug: 'battle_road_{season}_{year}',
+     label: 'Battle Road {season} {year}', scope: special}

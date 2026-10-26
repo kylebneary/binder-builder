@@ -199,8 +199,10 @@ const VARIANT_LABELS: Record<string, string> = {
   master_ball_holo: "Master Ball holo",
 };
 
-function variantLabel(v: string) {
-  return VARIANT_LABELS[v] ?? v.replace(/_/g, " ");
+/** Base printings are named here; tagged printings carry their label from the server
+ * (data/printing_tags.yaml). */
+function variantLabel(v: string, label?: string | null) {
+  return label ?? VARIANT_LABELS[v] ?? v.replace(/_/g, " ");
 }
 
 function cardPrice(card: CardSearchItem): string | null {
@@ -291,12 +293,12 @@ function ResultTile({
               aria-pressed={selected.has(v.id)}
               className={`rounded px-1.5 py-[2px] font-mono text-[9.5px] ${
                 selected.has(v.id) ? "bg-accent text-accent-fg" : "bg-inset text-ink-3 hover:text-ink"
-              }`}
-              title={`${variantLabel(v.variant)} · ${formatMoney(v.market_price)}${
-                v.owned_quantity > 0 ? " · owned" : ""
-              }`}
+              } ${v.is_special ? "border border-dashed border-warn-line" : ""}`}
+              title={`${variantLabel(v.variant, v.label)} · ${formatMoney(v.market_price)}${
+                v.is_special ? " · stamp/promo (Grand Master Set)" : ""
+              }${v.owned_quantity > 0 ? " · owned" : ""}`}
             >
-              {variantLabel(v.variant)}
+              {variantLabel(v.variant, v.label)}
             </button>
           ))}
         </div>
@@ -581,7 +583,7 @@ export default function CardSearchPage() {
               label="Only these printings"
               options={(facets?.variants ?? []).map((f) => ({
                 value: f.value,
-                label: variantLabel(f.value),
+                label: variantLabel(f.value, f.label),
                 count: f.count,
               }))}
               selected={str(query.variants)}

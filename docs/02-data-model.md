@@ -58,16 +58,31 @@ Index `(set_id, number_sort)`.
 |---|---|---|
 | id | PK | |
 | card_id | FK card | |
-| variant | enum | `normal`, `holofoil`, `reverse_holofoil`, `first_edition_normal`, `first_edition_holofoil`, `unlimited_holofoil`, `poke_ball_holo`, `master_ball_holo` |
-| tcgplayer_product_id | int null | |
+| variant | text(32) | a base printing from the `Variant` enum (`normal`, `holofoil`, `reverse_holofoil`, `first_edition_*`, `unlimited_holofoil`, ...) **or** a tagged printing's slug from `data/printing_tags.yaml` (`poke_ball_holo`, `prerelease`, `cosmos_holo`, `worlds_2024`, ...) |
+| tcgplayer_product_id | int null | a tagged printing points at its own product, not the card's |
 | tcgplayer_sub_type_name | text null | verbatim from tcgcsv, e.g. `Reverse Holofoil` |
 | is_canonical | bool | the variant counted by a non-master set goal |
+| is_special | bool | stamp, promo foil, event or error printing: Grand Master Set only |
 
 Unique `(card_id, variant)`. Index `(tcgplayer_product_id, tcgplayer_sub_type_name)`.
 
 Which variants exist for a card is **derived from the price feed**, not assumed: create a variant
-for every `subTypeName` tcgcsv returns for that product ID. This handles era quirks (Pokéball and
-Masterball holo patterns in Prismatic Evolutions, 1st Edition in WotC sets) without special-casing.
+for every `subTypeName` tcgcsv returns for that product ID. This handles era quirks (1st Edition in
+WotC sets) without special-casing.
+
+Printings TCGplayer sells as **separate products** — Poké Ball / Master Ball patterns, prerelease
+and staff stamps, Cosmos holos, Worlds stamps — get one row each, keyed by the slug
+`data/printing_tags.yaml` assigns their name tag (see `docs/03-data-sources.md`, step 4). Two
+rules decide how they count:
+
+- **Scope.** `scope: set` printings come from the set's own packs and count toward a Master Set;
+  `scope: special` ones (`is_special`) count only toward a Grand Master Set. Stored on the row so
+  goal queries stay plain SQL rather than consulting the YAML.
+- **A stamp needs something to vary from.** If a card's *only* product is stamped — most
+  prerelease promos and Worlds-stamped trainers were only ever released that way — the stamped
+  product is the card's base printing, not a special one. So a Worlds stamp is a separate printing
+  per year (`worlds_2023`, `worlds_2024`) whenever a card has more than one, and simply the card
+  when it has one.
 
 ### `sealed_product`
 | Column | Type | Notes |
@@ -148,7 +163,7 @@ is what keeps two implementations of one rule honest.
 id, collection_id, sealed_product_id, quantity, acquired_price, acquired_on, is_opened.
 
 ### `goal` / `goal_item`
-`goal`: id, name, goal_type (`set`, `master_set`, `filter`, `custom`), set_id null, filter_json,
+`goal`: id, name, goal_type (`set`, `master_set`, `grand_master_set`, `filter`, `custom`), set_id null, filter_json,
 target_condition, created_at.
 
 `goal_item`: goal_id, card_variant_id, required_qty (default 1).
@@ -157,12 +172,13 @@ Materialise `goal_item` when the goal is created or the set is updated. Do not e
 every read — the optimizer hits this table hundreds of thousands of times per simulation and it
 must be a plain join.
 
-The four types differ only in where `goal_item` comes from:
+The five types differ only in where `goal_item` comes from:
 
 | Type | Items come from | Resync |
 |---|---|---|
 | `set` | canonical variants of `set_id` | re-derived |
-| `master_set` | every variant of `set_id` | re-derived |
+| `master_set` | every non-special variant of `set_id` (pack printings) | re-derived |
+| `grand_master_set` | every variant of `set_id`, stamps and promos included | re-derived |
 | `filter` | `services/cards.py` run over `filter_json` | re-derived, so "every Pikachu" picks up new sets |
 | `custom` | hand edits (`POST /goals/{id}/items`) | **no-op**: the rows *are* the goal |
 

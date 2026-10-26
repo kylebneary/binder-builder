@@ -42,13 +42,18 @@ class ProductType(StrEnum):
 class GoalType(StrEnum):
     """How a goal's `goal_item` rows are decided.
 
-    SET / MASTER_SET / FILTER are rules, re-materialised on resync, so a filter goal like "every
-    Pikachu" picks up cards from newly ingested sets. CUSTOM has no rule: its items *are* the
-    goal, edited one by one, and resync leaves them alone.
+    SET / MASTER_SET / GRAND_MASTER_SET / FILTER are rules, re-materialised on resync, so a
+    filter goal like "every Pikachu" picks up cards from newly ingested sets. CUSTOM has no rule:
+    its items *are* the goal, edited one by one, and resync leaves them alone.
+
+    SET is one canonical printing per card; MASTER_SET adds every printing pulled from the set's
+    packs (reverse holos, Poké Ball patterns); GRAND_MASTER_SET adds the stamps and promo
+    printings too (`card_variant.is_special`).
     """
 
     SET = "set"
     MASTER_SET = "master_set"
+    GRAND_MASTER_SET = "grand_master_set"
     FILTER = "filter"
     CUSTOM = "custom"
 

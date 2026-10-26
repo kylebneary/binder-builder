@@ -604,3 +604,21 @@ def test_michi_layout_from_a_goal_uses_only_its_cards(db, catalogue):
     placed = {p.card_variant_id for p in layout.placements if p.kind == "card"}
     assert placed <= wanted
     assert result.placed == len(placed) and result.placed + result.unplaced == len(wanted)
+
+
+def test_master_layout_of_a_set_leaves_out_stamps(db, catalogue):
+    from app.models import CardVariant as CV
+
+    stamp = CV(
+        card_id=catalogue.pikachu_ex.id,
+        variant="prerelease",
+        tcgplayer_product_id=799998,
+        tcgplayer_sub_type_name="Holofoil",
+        is_special=True,
+    )
+    db.add(stamp)
+    db.commit()
+    rows = layout_source(db, set_id=catalogue.sparks.id, canonical_only=False)
+    ids = {r.variant.id for r in rows}
+    assert catalogue.pikachu_ex_reverse.id in ids
+    assert stamp.id not in ids

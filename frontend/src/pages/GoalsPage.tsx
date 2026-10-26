@@ -20,17 +20,22 @@ import {
 /**
  * Goal templates. Each one is a shortcut to a goal type the backend already understands:
  *
- * - set / master set  -> SET / MASTER_SET goals
+ * - set / master set / grand master set -> SET / MASTER_SET / GRAND_MASTER_SET goals
  * - Pokemon / artist / energy type -> live FILTER goals, which pick up newly ingested sets on
  *   resync. They are the same filters the card search uses, so "every Pikachu" here and the
  *   Pokemon filter on /cards agree card for card.
  * - build your own    -> the card search, which saves CUSTOM (hand-picked) or FILTER goals.
  */
-type Template = "set" | "master_set" | "pokemon" | "artist" | "type";
+type Template = "set" | "master_set" | "grand_master_set" | "pokemon" | "artist" | "type";
 
 const TEMPLATES: { value: Template; label: string; hint: string }[] = [
   { value: "set", label: "Set", hint: "One copy of every card in a set." },
-  { value: "master_set", label: "Master set", hint: "Every printing, reverse holos included." },
+  { value: "master_set", label: "Master set", hint: "Every printing from packs: reverse holos, patterns." },
+  {
+    value: "grand_master_set",
+    label: "Grand master set",
+    hint: "The master set plus every stamp and promo printing.",
+  },
   { value: "pokemon", label: "A Pokémon", hint: "Every card of one species, across every set." },
   { value: "artist", label: "An illustrator", hint: "Every card one artist drew." },
   { value: "type", label: "An energy type", hint: "Every Fire card, every Psychic card..." },
@@ -39,6 +44,7 @@ const TEMPLATES: { value: Template; label: string; hint: string }[] = [
 const GOAL_TYPE_LABEL: Record<string, string> = {
   set: "SET",
   master_set: "MASTER SET",
+  grand_master_set: "GRAND MASTER",
   filter: "LIVE FILTER",
   custom: "CUSTOM",
 };
@@ -60,13 +66,15 @@ export default function GoalsPage() {
   const pokemon = species.find((s) => s.name.toLowerCase() === pick.trim().toLowerCase());
   const artist = facets?.artists.find((a) => a.value.toLowerCase() === pick.trim().toLowerCase());
   const energy = facets?.types.find((t) => t.value === pick);
-  const isSetTemplate = template === "set" || template === "master_set";
+  const isSetTemplate =
+    template === "set" || template === "master_set" || template === "grand_master_set";
 
   // The suggested name, used when the name box is left empty.
   const suggested = isSetTemplate
     ? (() => {
         const s = sets?.find((x) => x.id === setId);
-        return s ? `${s.name}${template === "master_set" ? " master set" : ""}` : "";
+        const suffix = { set: "", master_set: " master set", grand_master_set: " grand master set" };
+        return s ? `${s.name}${suffix[template as keyof typeof suffix]}` : "";
       })()
     : template === "pokemon" && pokemon
       ? `Every ${pokemon.name} card`

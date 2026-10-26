@@ -536,6 +536,25 @@ Pokémon" / "every card by an artist" as templates, and laid out in the binder d
   `bb goal create --type custom`, `bb goal add-cards|remove-cards|convert|resync`,
   `bb binder auto-layout|michi --goal ID`.
 
+**Follow-up on the same branch: tagged printings and the Grand Master Set.** Owner asked for an
+"every printing" view including stamps, a `grand_master_set` goal type that counts them, and a
+separate printing per Worlds year.
+
+- A survey of all 169 mapped tcgcsv groups found TCGplayer's bracket tags mean three different
+  things (name disambiguation, in-set pattern printings, stamps/promos), now curated in
+  `data/printing_tags.yaml` and applied by a second matching pass. See `docs/03-data-sources.md`
+  step 4 and the `card_variant` notes in `docs/02-data-model.md`.
+- New column `card_variant.is_special` (migration `d3a8f1c6b905`). Master Set = non-special
+  printings (so it now includes Poké Ball / Master Ball patterns); Grand Master Set = all.
+- Run over cached feed data against a copy of the real DB: +4,297 printings; cards with no
+  printing at all fell from 4,808 to 2,575; 86 special printings. Few Prerelease/Worlds stamps come
+  out *special* because nearly all of them only exist stamped, which makes the stamp the card.
+- **To apply to the real DB:** `alembic upgrade head`, then `bb ingest prices` (re-fetches from
+  tcgcsv; the matcher only runs at ingest time).
+- Still open, not caused by this work: 663 WotC-era products use subTypeNames `1st Edition` and
+  `Unlimited`, which `SUBTYPE_TO_VARIANT` does not map; Champions Festival placement stamps have
+  no TCGplayer price so get no row; ~2,000 cards still fall to the low-confidence review path.
+
 50 new tests (`test_service_cards.py`, `test_api_cards.py`, and additions to the goal and binder
 suites over a shared two-era fixture, `conftest.seed_catalogue`). Full suite: 407 passing. Checked
 against the real 20,479-card DB via the CLI, and end to end in headless Chromium against a *copy* of

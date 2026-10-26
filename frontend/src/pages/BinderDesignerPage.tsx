@@ -120,7 +120,7 @@ function goalPoolEntries(cards: CardSearchItem[]): PoolEntry[] {
       detail:
         v.variant === "normal" || v.variant === "holofoil"
           ? card.set_name
-          : `${card.set_name} · ${v.variant.replace(/_/g, " ")}`,
+          : `${card.set_name} · ${v.label ?? v.variant.replace(/_/g, " ")}`,
     })),
   );
 }

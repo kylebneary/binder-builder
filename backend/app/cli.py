@@ -477,7 +477,9 @@ def cards_search(
 @goal_app.command("create")
 def goal_create(
     name: str = typer.Option(..., "--name", help="Human-readable goal name."),
-    goal_type: str = typer.Option("set", "--type", help="set | master_set | custom"),
+    goal_type: str = typer.Option(
+        "set", "--type", help="set | master_set | grand_master_set | custom"
+    ),
     set_id: str | None = typer.Option(None, "--set", help="ptcg_set_id, e.g. sv8."),
     start_with: list[int] = typer.Option(
         [], "--variant", help="Custom goals: a card_variant id to start with; repeatable."

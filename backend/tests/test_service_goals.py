@@ -407,3 +407,35 @@ def test_need_list_carries_set_and_image_for_multi_set_goals(db, catalogue):
     # Release order, not insertion order or card number.
     assert [i.set_name for i in detail.items] == ["Base", "Surging Sparks"]
     assert detail.items[1].need_qty == 0  # the owned Pikachu ex
+
+
+def _add_stamp(db, card, product_id=799999, slug="prerelease"):
+    stamp = CardVariant(
+        card_id=card.id,
+        variant=slug,
+        tcgplayer_product_id=product_id,
+        tcgplayer_sub_type_name="Holofoil",
+        is_canonical=False,
+        is_special=True,
+    )
+    db.add(stamp)
+    db.commit()
+    return stamp
+
+
+def test_master_set_excludes_stamps_and_grand_master_set_includes_them(db, catalogue):
+    stamp = _add_stamp(db, catalogue.pikachu_ex)
+    sparks = catalogue.sparks.id
+    master = create_goal(db, "Master", GoalType.MASTER_SET, set_id=sparks)
+    grand = create_goal(db, "Grand", GoalType.GRAND_MASTER_SET, set_id=sparks)
+    assert stamp.id not in _item_ids(db, master.id)
+    assert catalogue.pikachu_ex_reverse.id in _item_ids(db, master.id)
+    assert _item_ids(db, grand.id) == _item_ids(db, master.id) | {stamp.id}
+
+
+def test_need_list_labels_tagged_printings(db, catalogue):
+    stamp = _add_stamp(db, catalogue.pikachu_ex, slug="worlds_2024")
+    goal = create_goal(db, "Stamp", GoalType.CUSTOM, card_variant_ids=[stamp.id])
+    detail = get_goal_need_list(db, goal.id, catalogue.collection.id)
+    assert detail is not None
+    assert detail.items[0].variant_label == "Worlds 2024 stamp"

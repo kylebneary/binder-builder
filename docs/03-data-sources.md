@@ -157,6 +157,15 @@ There is no shared key. Match on `(set, card number, name)`:
    differences in the base name itself — a handful of cards per set still fall through to the
    review queue on those.
 3. Log unmatched cards to a review queue. Promos and special subsets will need manual mapping.
+4. **Tagged products** (added 2026-10-25). TCGplayer sells a stamped or pattern printing as its
+   *own product* beside the card's base product, and reuses the same bracket syntax for plain
+   name disambiguation: "Aerodactyl (Delta Species)" is the card itself, "Exeggcute (Poke Ball
+   Pattern)" is an extra pack-pulled printing, "Pikachu - 027 (Prerelease)" is a stamp. Products
+   step 2 cannot pin down get a second pass (`match_tagged_products`), which classifies each tag
+   against the curated `data/printing_tags.yaml` (name tag / in-set printing / special printing)
+   and matches on the remaining name and number. Unknown tags are logged per set, never guessed.
+   The survey behind the file found this second pass prices 2,233 previously variant-less cards
+   (mostly name tags the exact matcher rejected) and adds ~1,100 tagged printings.
 
 Do not skip step 3. Silent mismatches produce confidently wrong prices, which is worse than a gap.
 

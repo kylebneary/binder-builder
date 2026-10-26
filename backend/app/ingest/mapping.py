@@ -6,6 +6,10 @@ They must never fail silently, because a silent mismatch yields confidently wron
 """
 import re
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.ingest.printing_tags import Printing
 
 
 @dataclass(slots=True)
@@ -93,6 +97,110 @@ def strip_known_treatment_suffix(clean_name: str) -> str:
         return clean_name
     longest = max(matches, key=len)
     return clean_name[: -(len(longest) + 1)]
+
+
+@dataclass(slots=True)
+class TaggedMatch:
+    """A product whose name carries bracketed tags, resolved to the card it belongs to.
+
+    `printing` is None when every tag was a name tag: the product is then simply the card's own
+    product (its Normal/Holo/Reverse printings). Otherwise it is the tagged printing it sells.
+    """
+
+    ptcg_card_id: str
+    tcgplayer_product_id: int
+    printing: "Printing | None"
+    tags: list[str]
+
+
+@dataclass(slots=True)
+class UnresolvedProduct:
+    tcgplayer_product_id: int
+    name: str
+    reason: str
+    unknown_tags: list[str]
+
+
+_TAG = re.compile(r"\(([^()]*)\)")
+# " - 027", " - 027/078", " - SWSH241", " - BW48" -- the number tcgcsv puts in a promo's name.
+_NAME_NUMBER = re.compile(r"\s+-\s+[A-Za-z]*\d+[A-Za-z]*(?:/[A-Za-z]*\d+)?(?=\s|$)")
+
+
+def split_product_name(name: str) -> tuple[str, list[str]]:
+    """'Crobat - BW51 (Team Plasma) (Prerelease)' -> ('Crobat', ['Team Plasma', 'Prerelease'])."""
+    tags = [t.strip() for t in _TAG.findall(name)]
+    base = _NAME_NUMBER.sub("", _TAG.sub(" ", name))
+    return re.sub(r"\s+", " ", base).strip(), tags
+
+
+def match_tagged_products(
+    cards, products, matched_product_ids: set[int], registry
+) -> tuple[list[TaggedMatch], list[UnresolvedProduct]]:
+    """Second pass for the products `match_cards_in_set` could not pin to a card: the ones whose
+    name carries bracketed tags ("Aerodactyl (Delta Species)", "Pikachu - 027 (Prerelease)").
+
+    Each tag is classified by data/printing_tags.yaml. Name tags are stripped; at most one
+    printing remains (two printing tags are looked up as their " + " combination). The product
+    then matches the card with the same normalized number and name. Anything that does not
+    resolve cleanly -- an unknown tag, no such card, two printings with no combined entry -- is
+    returned as unresolved with its reason, never guessed.
+    """
+    by_key: dict[tuple[str | None, str], list] = {}
+    for card in cards:
+        key = (normalize_number(card.number), normalize_name(card.name))
+        by_key.setdefault(key, []).append(card)
+
+    matches: list[TaggedMatch] = []
+    unresolved: list[UnresolvedProduct] = []
+    for product in products:
+        if product.card_number is None or product.tcgplayer_product_id in matched_product_ids:
+            continue
+        base, tags = split_product_name(product.name)
+        if not tags:
+            continue
+
+        printing_tags: list[str] = []
+        unknown: list[str] = []
+        for tag in tags:
+            kind = registry.classify(tag).kind
+            if kind == "printing":
+                printing_tags.append(tag)
+            elif kind == "unknown":
+                unknown.append(tag)
+        if unknown:
+            unresolved.append(
+                UnresolvedProduct(
+                    product.tcgplayer_product_id, product.name, "unknown tag", unknown
+                )
+            )
+            continue
+
+        printing = None
+        if printing_tags:
+            found = registry.classify(" + ".join(printing_tags))
+            if found.printing is None:
+                unresolved.append(
+                    UnresolvedProduct(
+                        product.tcgplayer_product_id,
+                        product.name,
+                        "several printing tags with no combined entry",
+                        [],
+                    )
+                )
+                continue
+            printing = found.printing
+
+        candidates = by_key.get((normalize_number(product.card_number), normalize_name(base)), [])
+        if len(candidates) != 1:
+            reason = "no card with this number and name" if not candidates else "ambiguous card"
+            unresolved.append(
+                UnresolvedProduct(product.tcgplayer_product_id, product.name, reason, [])
+            )
+            continue
+        matches.append(
+            TaggedMatch(candidates[0].ptcg_card_id, product.tcgplayer_product_id, printing, tags)
+        )
+    return matches, unresolved
 
 
 def match_cards_in_set(cards, products) -> list[MatchResult]:

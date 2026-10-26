@@ -488,7 +488,9 @@ def layout_source(
 
     Shared by every auto-layout mode, Michi included, so "lay out this goal" means the same pool
     everywhere. `canonical_only` applies to sets only -- a goal already says which printings it
-    wants, and second-guessing it would drop the reverse holos from a master-set goal.
+    wants, and second-guessing it would drop the reverse holos from a master-set goal. Without
+    it a set yields its Master Set: every printing from its packs, but not the stamps and promo
+    printings (`is_special`), which only a Grand Master Set goal asks for.
     """
     if (set_id is None) == (goal_id is None):
         raise ValueError("Lay out from exactly one of a set or a goal")
@@ -506,6 +508,8 @@ def layout_source(
         stmt = stmt.where(Card.set_id == set_id)
         if canonical_only:
             stmt = stmt.where(CardVariant.is_canonical.is_(True))
+        else:
+            stmt = stmt.where(CardVariant.is_special.is_(False))
     rows = db.execute(stmt).all()
 
     by_release = sorted(

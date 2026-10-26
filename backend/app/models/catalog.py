@@ -13,6 +13,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
+from sqlalchemy import false as sa_false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -66,8 +67,10 @@ class Card(Base, TimestampMixin):
 class CardVariant(Base, TimestampMixin):
     """A specific printing of a card. THE pricing and ownership unit -- see docs/02-data-model.md.
 
-    Which variants exist is derived from the price feed (one row per subTypeName tcgcsv
-    returns for the product), never assumed from the card's rarity.
+    Which variants exist is derived from the price feed, never assumed from the card's rarity:
+    one row per subTypeName tcgcsv returns for the card's product (`variant` is then a Variant
+    enum value), plus one per separately-sold tagged printing -- a Poké Ball pattern, a
+    prerelease stamp -- whose `variant` is that printing's slug from data/printing_tags.yaml.
     """
 
     __tablename__ = "card_variant"
@@ -82,6 +85,12 @@ class CardVariant(Base, TimestampMixin):
     tcgplayer_product_id: Mapped[int | None]
     tcgplayer_sub_type_name: Mapped[str | None] = mapped_column(String(64))
     is_canonical: Mapped[bool] = mapped_column(Boolean, default=False)
+    # A stamp, promo foil or event printing distributed outside the set's packs. Counted by a
+    # Grand Master Set goal, not a Master Set one. Stored rather than looked up in the YAML so
+    # the goal and search queries stay plain SQL.
+    is_special: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=sa_false()
+    )
 
     card: Mapped[Card] = relationship(back_populates="variants")
 

@@ -18,6 +18,7 @@ from typing import Any, Literal
 from sqlalchemy import Integer, Numeric, Select, String, cast, column, func, or_, select, table
 from sqlalchemy.orm import Session
 
+from app.ingest.printing_tags import printing_label
 from app.models import Card, CardVariant, CollectionItem, GoalItem, Set
 from app.services.prices import get_current_prices
 from app.services.sets import VariantView
@@ -429,6 +430,8 @@ def _load_cards(
                 is_canonical=variant.is_canonical,
                 market_price=price["market"] if price else None,
                 owned_quantity=owned_by_variant.get(variant.id, 0),
+                is_special=variant.is_special,
+                label=printing_label(str(variant.variant)),
             )
         )
     return [by_card[cid] for cid in card_ids if cid in by_card]
@@ -441,6 +444,7 @@ def _load_cards(
 class FacetValue:
     value: str
     count: int
+    label: str | None = None  # printings only: the tagged printing's collector-facing name
 
 
 @dataclass(slots=True)
@@ -539,6 +543,10 @@ def card_facets(db: Session) -> CardFacets:
         if dex_names.get(number)
     ]
 
+    printings = _ranked(variants)
+    for facet in printings:
+        facet.label = printing_label(facet.value)
+
     return CardFacets(
         rarities=_ranked(rarities),
         supertypes=_ranked(supertypes),
@@ -546,6 +554,6 @@ def card_facets(db: Session) -> CardFacets:
         subtypes=_ranked(subtypes),
         artists=_alphabetical(artists),
         series=_ranked(series),
-        variants=_ranked(variants),
+        variants=printings,
         species=species,
     )

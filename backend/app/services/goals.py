@@ -16,6 +16,7 @@ from decimal import Decimal
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from app.ingest.printing_tags import printing_label
 from app.models import Card, CardVariant, CollectionItem, Goal, GoalItem, Set
 from app.models.enums import Condition, GoalType
 from app.services.cards import CardQuery, variant_ids
@@ -32,14 +33,16 @@ class GoalTypeError(GoalEditError):
     conflicts with its type, which is why the API answers 409 rather than 422."""
 
 
-def _set_variant_ids(db: Session, set_id: int | None, *, canonical_only: bool) -> list[int]:
+def _set_variant_ids(db: Session, set_id: int | None, goal_type: GoalType) -> list[int]:
     if set_id is None:
         return []
     stmt = select(CardVariant.id).join(Card, CardVariant.card_id == Card.id).where(
         Card.set_id == set_id
     )
-    if canonical_only:
+    if goal_type == GoalType.SET:
         stmt = stmt.where(CardVariant.is_canonical.is_(True))
+    elif goal_type == GoalType.MASTER_SET:
+        stmt = stmt.where(CardVariant.is_special.is_(False))
     return list(db.execute(stmt).scalars().all())
 
 
@@ -75,10 +78,8 @@ def _infer_set_id(db: Session, goal: Goal) -> int | None:
 def materialize_goal_items(db: Session, goal: Goal) -> None:
     if goal.goal_type == GoalType.CUSTOM:
         return
-    if goal.goal_type == GoalType.SET:
-        ids = _set_variant_ids(db, goal.set_id, canonical_only=True)
-    elif goal.goal_type == GoalType.MASTER_SET:
-        ids = _set_variant_ids(db, goal.set_id, canonical_only=False)
+    if goal.goal_type in (GoalType.SET, GoalType.MASTER_SET, GoalType.GRAND_MASTER_SET):
+        ids = _set_variant_ids(db, goal.set_id, goal.goal_type)
     elif goal.goal_type == GoalType.FILTER:
         ids = _filter_variant_ids(db, goal.filter_json)
     else:
@@ -256,6 +257,7 @@ class NeedItem:
     set_name: str = ""
     ptcg_set_id: str = ""
     image_small: str | None = None
+    variant_label: str | None = None  # tagged printings only, e.g. "Prerelease stamp"
 
 
 @dataclass(slots=True)
@@ -339,6 +341,7 @@ def get_goal_need_list(
                 set_name=set_row.name,
                 ptcg_set_id=set_row.ptcg_set_id,
                 image_small=card.image_small,
+                variant_label=printing_label(str(variant.variant)),
             )
         )
         if need > 0:
