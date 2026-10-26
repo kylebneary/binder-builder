@@ -157,6 +157,27 @@ Halloween promo bundle product, not something to build a pull-rate profile for.
       follow-up but deliberately not bundled into this pass since they're a different kind of
       change (core normalization, not a treatment-suffix whitelist) and deserve their own
       verification.
+- [ ] **3a. The printing (variant) catalogue needs continued build-out.** Owner's standing ask
+      (2026-10-25): keep extending the database until every real printing of a card is a
+      `card_variant` row, so Master and Grand Master Set goals are complete. Done so far: base
+      subTypes, tagged printings (`data/printing_tags.yaml`), WotC 1st Edition / Unlimited, and
+      Base Set Shadowless via an edition group. Known gaps, roughly by size:
+  - [ ] ~1,911 cards with no printing at all, mostly the low-confidence name-match review path
+        (the `normalize_name` gaps described above) rather than missing data.
+  - [ ] Printings TCGplayer doesn't sell as a product get no row, because rows are derived from
+        the price feed: Champions Festival placement stamps, Base Set's later print runs (the
+        "1999-2000" copyright and UK 4th print), 1st Edition stamp variants (thin/thick, "ghost"),
+        and most error cards. Needs a curated, unpriced printing source, which is a model
+        decision (a variant with no price identity), so ask before starting.
+  - [ ] Unknown tags the ingest logs per set (`np`: City Championships, Origins Game Fair, Gen
+        Con, magazine promos; `bw5` "Gold"; `sm35` "Secret Shining"; Base Set Shadowless
+        "Pikachu (Red Cheeks)"). Classify each in `data/printing_tags.yaml`.
+  - [ ] Tagged printings sold with more than one subType (one product, two finishes) are skipped;
+        they need a slug per finish.
+  - [ ] Other print runs TCGplayer may sell as their own group: check the tcgcsv group list for
+        any beyond 1663 and add them under `edition_groups`.
+  - [ ] Feed holes, nothing to do but recheck: Base Set Shadowless Mewtwo has no
+        `1st Edition Holofoil` price row.
 - [ ] `data/sealed_map.yaml`: ~2,405 of ~2,922 tcgcsv sealed products still need hand
       classification (`product_type` / `packs_per_unit`) — the remaining ~517 were mechanically
       classifiable by name pattern. `bb sync sealedmap` prints the review queue. Tracked here as

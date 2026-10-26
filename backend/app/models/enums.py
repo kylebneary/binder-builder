@@ -13,7 +13,12 @@ class Variant(StrEnum):
     REVERSE_HOLOFOIL = "reverse_holofoil"
     FIRST_EDITION_NORMAL = "first_edition_normal"
     FIRST_EDITION_HOLOFOIL = "first_edition_holofoil"
+    UNLIMITED_NORMAL = "unlimited_normal"
     UNLIMITED_HOLOFOIL = "unlimited_holofoil"
+    # Base Set's early unlimited run, sold by TCGplayer as its own group ("Base Set
+    # (Shadowless)") rather than as a subTypeName -- see edition_groups in printing_tags.yaml.
+    SHADOWLESS_NORMAL = "shadowless_normal"
+    SHADOWLESS_HOLOFOIL = "shadowless_holofoil"
     POKE_BALL_HOLO = "poke_ball_holo"
     MASTER_BALL_HOLO = "master_ball_holo"
 

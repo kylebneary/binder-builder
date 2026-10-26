@@ -78,7 +78,10 @@ classifier. Do not classify on the product name; naming is inconsistent across e
 ```
 
 `subTypeName` values seen: `Normal`, `Holofoil`, `Reverse Holofoil`, `1st Edition Holofoil`,
-`1st Edition Normal`, `Unlimited Holofoil`. **This field is why the data model keys prices to a
+`1st Edition Normal`, `Unlimited Holofoil`, and — on WotC-era non-holo cards, 2026-10-25 survey —
+bare `1st Edition` and `Unlimited` (674 products each). Base Set's Shadowless/1st Edition run is
+not a subTypeName at all but its own group, "Base Set (Shadowless)" (groupId 1663); see
+`edition_groups` in `data/printing_tags.yaml` and `docs/02-data-model.md`. **This field is why the data model keys prices to a
 card *variant*, not a card.** A card with a $2 Normal and a $30 Reverse Holofoil is one product ID
 with two price rows, and a master-set goal needs both.
 
@@ -166,6 +169,11 @@ There is no shared key. Match on `(set, card number, name)`:
    and matches on the remaining name and number. Unknown tags are logged per set, never guessed.
    The survey behind the file found this second pass prices 2,233 previously variant-less cards
    (mostly name tags the exact matcher rejected) and adds ~1,100 tagged printings.
+5. **Edition groups** (added 2026-10-25). A tcgcsv group that is an extra print run of an
+   already-mapped set — so far only "Base Set (Shadowless)" (1663) for `base1` — is matched
+   against that set's cards with the group's own subTypeName mapping from
+   `data/printing_tags.yaml`. `bb ingest prices` with no options picks it up with every other
+   group; `--set base1` includes it after the primary group.
 
 Do not skip step 3. Silent mismatches produce confidently wrong prices, which is worse than a gap.
 

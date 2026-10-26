@@ -551,9 +551,16 @@ separate printing per Worlds year.
   out *special* because nearly all of them only exist stamped, which makes the stamp the card.
 - **To apply to the real DB:** `alembic upgrade head`, then `bb ingest prices` (re-fetches from
   tcgcsv; the matcher only runs at ingest time).
-- Still open, not caused by this work: 663 WotC-era products use subTypeNames `1st Edition` and
-  `Unlimited`, which `SUBTYPE_TO_VARIANT` does not map; Champions Festival placement stamps have
-  no TCGplayer price so get no row; ~2,000 cards still fall to the low-confidence review path.
+- **Editions: 1st Edition, Unlimited, Shadowless.** WotC-era `1st Edition` / `Unlimited`
+  subTypeNames now map (`first_edition_normal`, new `unlimited_normal`), and the separate "Base
+  Set (Shadowless)" tcgcsv group (1663) is a curated *edition group* that adds `shadowless_*` and
+  `first_edition_*` printings to `base1` without replacing its primary group. Canonical now
+  prefers unlimited over 1st Edition. No migration (`variant` is text). Over the cached feed:
+  +1,515 printings; cards with no printing fell from 2,575 to 1,911. Re-run `bb ingest prices`
+  to apply; existing `set` goals pick up the new canonical printings on resync.
+- **The printing catalogue is not finished.** Rows still only exist where TCGplayer sells a
+  product, and several known gaps remain — tracked in `docs/07-data-backlog.md` §3a. Keep
+  building it out there before treating a Grand Master Set as complete.
 
 50 new tests (`test_service_cards.py`, `test_api_cards.py`, and additions to the goal and binder
 suites over a shared two-era fixture, `conftest.seed_catalogue`). Full suite: 407 passing. Checked

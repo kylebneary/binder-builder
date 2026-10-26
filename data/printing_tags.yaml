@@ -183,3 +183,19 @@ patterns:
      label: 'Illustration Contest {year}', scope: special}
   - {regex: '^battle road (?P<season>autumn|spring) (?P<year>\d{4})$', slug: 'battle_road_{season}_{year}',
      label: 'Battle Road {season} {year}', scope: special}
+
+# Print runs TCGplayer sells as a separate GROUP rather than a subTypeName. The group is not the
+# set's primary group in set_map.yaml; its products add printings to the set's cards, read through
+# the subtype mapping below. Printings from these groups are never canonical (a plain set goal
+# counts the primary group's print) but are pulled from packs, so they belong in a Master Set.
+edition_groups:
+  # Base Set (Shadowless). Every 1st Edition Base Set card is shadowless, so TCGplayer lists
+  # 1st Edition here; its "Unlimited" is the shadowless unlimited run. Group 604 (base1's primary)
+  # is the later unlimited print with the drop shadow.
+  - group: 1663
+    set: base1
+    subtypes:
+      1st Edition: first_edition_normal
+      1st Edition Holofoil: first_edition_holofoil
+      Unlimited: shadowless_normal
+      Unlimited Holofoil: shadowless_holofoil

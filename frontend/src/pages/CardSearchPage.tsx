@@ -194,7 +194,10 @@ const VARIANT_LABELS: Record<string, string> = {
   reverse_holofoil: "Reverse holo",
   first_edition_normal: "1st Edition",
   first_edition_holofoil: "1st Edition holo",
+  unlimited_normal: "Unlimited",
   unlimited_holofoil: "Unlimited holo",
+  shadowless_normal: "Shadowless",
+  shadowless_holofoil: "Shadowless holo",
   poke_ball_holo: "Poké Ball holo",
   master_ball_holo: "Master Ball holo",
 };

@@ -8,7 +8,7 @@ until the general fuzzy set-name matcher (data/set_map.yaml, phase 1.5) exists.
 """
 import logging
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.ingest.base import PricePointDTO, ProductDTO
 from app.ingest.mapping import match_cards_in_set, match_tagged_products
-from app.ingest.printing_tags import default_registry
+from app.ingest.printing_tags import EditionGroup, default_registry
 from app.ingest.sealed import upsert_sealed_products
 from app.ingest.tcgcsv import TcgCsvPriceSource
 from app.models import Card, CardVariant, PricePoint, Set
@@ -46,18 +46,23 @@ SUBTYPE_TO_VARIANT: dict[str, Variant] = {
     "1st Edition Normal": Variant.FIRST_EDITION_NORMAL,
     "1st Edition Holofoil": Variant.FIRST_EDITION_HOLOFOIL,
     "Unlimited Holofoil": Variant.UNLIMITED_HOLOFOIL,
+    # WotC-era non-holo cards (Jungle through Neo Destiny) use the bare edition names.
+    "1st Edition": Variant.FIRST_EDITION_NORMAL,
+    "Unlimited": Variant.UNLIMITED_NORMAL,
 }
 
 # Preference order for is_canonical when a card has more than one variant. Not specified by
 # docs/02-data-model.md ("the variant counted by a non-master set goal") -- a documented
-# assumption: prefer the plain print, then holo-only prints; reverse holo is never canonical
-# since it's the master-set-only extra.
+# assumption: prefer the plain print, then holo-only prints, then unlimited over 1st Edition (the
+# common, cheaper copy a plain set goal means); reverse holo is never canonical since it's the
+# master-set-only extra.
 _CANONICAL_PREFERENCE = [
     Variant.NORMAL,
     Variant.HOLOFOIL,
+    Variant.UNLIMITED_NORMAL,
+    Variant.UNLIMITED_HOLOFOIL,
     Variant.FIRST_EDITION_NORMAL,
     Variant.FIRST_EDITION_HOLOFOIL,
-    Variant.UNLIMITED_HOLOFOIL,
     Variant.REVERSE_HOLOFOIL,
 ]
 
@@ -117,11 +122,17 @@ class _Printing:
     is_special: bool
 
 
-def _base_printings(product_id: int, prices: list[PricePointDTO], card_id: str) -> list[_Printing]:
-    """A card's own product: one printing per recognised subTypeName."""
+def _base_printings(
+    product_id: int,
+    prices: list[PricePointDTO],
+    card_id: str,
+    subtypes: Mapping[str, str] = SUBTYPE_TO_VARIANT,
+) -> list[_Printing]:
+    """A card's own product: one printing per recognised subTypeName. An edition group passes
+    its own `subtypes`, since its "Unlimited" means a different print run."""
     out: list[_Printing] = []
     for price in prices:
-        variant = SUBTYPE_TO_VARIANT.get(price.sub_type_name)
+        variant = subtypes.get(price.sub_type_name)
         if variant is None:
             log.warning(
                 "Unrecognized subTypeName %r for product %s (card %s) -- skipping",
@@ -130,7 +141,7 @@ def _base_printings(product_id: int, prices: list[PricePointDTO], card_id: str) 
                 card_id,
             )
             continue
-        out.append(_Printing(variant.value, product_id, price.sub_type_name, is_special=False))
+        out.append(_Printing(str(variant), product_id, price.sub_type_name, is_special=False))
     return out
 
 
@@ -139,6 +150,7 @@ def _derive_variants(
     set_row: Set,
     products: list[ProductDTO],
     prices_by_product: dict[int, list[PricePointDTO]],
+    edition_group: EditionGroup | None = None,
 ) -> int:
     """Derive card_variant rows for a set from its products, in two passes.
 
@@ -151,10 +163,15 @@ def _derive_variants(
     Printings are gathered per card before anything is written, so the canonical printing is
     chosen from everything the card has, and a second product claiming a printing the card
     already has is reported rather than silently overwriting the first.
+
+    With `edition_group` (a secondary print-run group such as Base Set (Shadowless)), subTypes
+    are read through that group's own mapping and is_canonical is left alone: the set's primary
+    group decides the canonical printing.
     """
     cards = list(db.execute(select(Card).where(Card.set_id == set_row.id)).scalars())
     cards_by_ptcg_id = {c.ptcg_card_id: c for c in cards}
     registry = default_registry()
+    subtypes: Mapping[str, str] = edition_group.subtypes if edition_group else SUBTYPE_TO_VARIANT
 
     base: dict[str, list[_Printing]] = {}
     tagged: dict[str, list[_Printing]] = {}
@@ -171,6 +188,7 @@ def _derive_variants(
                 m.tcgplayer_product_id,
                 prices_by_product.get(m.tcgplayer_product_id, []),
                 m.ptcg_card_id,
+                subtypes,
             )
         )
 
@@ -181,7 +199,7 @@ def _derive_variants(
         prices = prices_by_product.get(tm.tcgplayer_product_id, [])
         if tm.printing is None:
             base.setdefault(tm.ptcg_card_id, []).extend(
-                _base_printings(tm.tcgplayer_product_id, prices, tm.ptcg_card_id)
+                _base_printings(tm.tcgplayer_product_id, prices, tm.ptcg_card_id, subtypes)
             )
             continue
         if len(prices) != 1:
@@ -232,7 +250,8 @@ def _derive_variants(
             row.tcgplayer_product_id = p.product_id
             row.tcgplayer_sub_type_name = p.sub_type_name
             row.is_special = p.is_special
-            row.is_canonical = p.variant == canonical
+            if edition_group is None:
+                row.is_canonical = p.variant == canonical
             n_touched += 1
     return n_touched
 
@@ -292,8 +311,9 @@ def resolve_group_set_pairs(
       declaration (`ingest_group_prices` persists it on `Set.tcgplayer_group_id`).
     - `--group` only: filters to those groups; matching runs only if a `Set` already has that
       `tcgplayer_group_id` from a prior paired call.
-    - `--set` only: looks up each set's already-mapped `tcgplayer_group_id`; raises if any set
-      isn't mapped yet, rather than silently skipping it.
+    - `--set` only: looks up each set's already-mapped `tcgplayer_group_id`, plus any edition
+      groups for it (data/printing_tags.yaml); raises if any set isn't mapped yet, rather than
+      silently skipping it.
     - Neither: every tcgcsv group (`all_group_ids()`), matching wherever a `Set` is already linked.
 
     Raises ValueError (never silently guesses) for unequal --group/--set counts or an unmapped
@@ -319,6 +339,12 @@ def resolve_group_set_pairs(
                 unmapped.append(ref)
                 continue
             pairs.append((set_row.tcgplayer_group_id, ref))
+            # Primary first, so its canonical choice is made before the extra print runs land.
+            pairs.extend(
+                (g.group_id, None)
+                for g in default_registry().edition_groups.values()
+                if g.ptcg_set_id == ref
+            )
         if unmapped:
             raise ValueError(
                 "no tcgplayer_group_id mapped yet for: "
@@ -346,7 +372,14 @@ def ingest_group_prices(
     results: list[GroupIngestResult] = []
     for group_id, set_ref in group_set_pairs:
         try:
-            if set_ref is not None:
+            # An edition group adds printings to a set whose primary group is elsewhere, so it
+            # is never written to Set.tcgplayer_group_id (that would unlink the primary).
+            edition_group = default_registry().edition_groups.get(group_id)
+            if edition_group is not None:
+                set_row = db.execute(
+                    select(Set).where(Set.ptcg_set_id == edition_group.ptcg_set_id)
+                ).scalar_one_or_none()
+            elif set_ref is not None:
                 set_row = db.execute(
                     select(Set).where(Set.ptcg_set_id == set_ref)
                 ).scalar_one_or_none()
@@ -376,7 +409,9 @@ def ingest_group_prices(
                 prices_by_product: dict[int, list[PricePointDTO]] = {}
                 for price in prices:
                     prices_by_product.setdefault(price.tcgplayer_product_id, []).append(price)
-                n_variants = _derive_variants(db, set_row, products, prices_by_product)
+                n_variants = _derive_variants(
+                    db, set_row, products, prices_by_product, edition_group
+                )
             else:
                 log.warning(
                     "Group %s has no linked Set -- price_point/sealed_product rows written, "

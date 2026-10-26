@@ -51,11 +51,23 @@ class _Pattern:
 
 
 @dataclass(frozen=True, slots=True)
+class EditionGroup:
+    """A tcgcsv group that is an extra print run of a set already mapped in set_map.yaml, e.g.
+    "Base Set (Shadowless)" for base1. Its products price printings of the set's cards, with
+    its own subTypeName -> variant mapping in place of prices.SUBTYPE_TO_VARIANT."""
+
+    group_id: int
+    ptcg_set_id: str
+    subtypes: dict[str, str]
+
+
+@dataclass(frozen=True, slots=True)
 class PrintingRegistry:
     name_tags: frozenset[str]
     name_patterns: tuple[re.Pattern[str], ...]
     printings: dict[str, Printing]  # lowercased tag or alias -> printing
     patterns: tuple[_Pattern, ...]
+    edition_groups: dict[int, EditionGroup]  # tcgcsv groupId -> group
 
     def classify(self, tag: str) -> TagClass:
         """Classify one tag (or a " + "-joined combination). Tried as written, then with a
@@ -144,7 +156,24 @@ def load_registry(path: Path) -> PrintingRegistry:
             _Pattern(re.compile(e["regex"]), e["slug"], e["label"], e["scope"])
             for e in data.get("patterns") or []
         ),
+        edition_groups=_edition_groups(path, data.get("edition_groups") or [], base_values),
     )
+
+
+def _edition_groups(
+    path: Path, entries: list[dict], base_values: set[str]
+) -> dict[int, EditionGroup]:
+    groups: dict[int, EditionGroup] = {}
+    for entry in entries:
+        subtypes = {str(k): str(v) for k, v in entry["subtypes"].items()}
+        unknown = sorted(set(subtypes.values()) - base_values)
+        if unknown:
+            raise ValueError(f"{path}: edition group {entry['group']} maps to unknown {unknown}")
+        group = EditionGroup(int(entry["group"]), entry["set"], subtypes)
+        if group.group_id in groups:
+            raise ValueError(f"{path}: edition group {group.group_id} is listed twice")
+        groups[group.group_id] = group
+    return groups
 
 
 @lru_cache(maxsize=1)

@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 from app.ingest.base import PricePointDTO, ProductDTO
 from app.ingest.mapping import match_tagged_products, split_product_name
-from app.ingest.prices import _derive_variants
+from app.ingest.prices import _derive_variants, resolve_group_set_pairs
 from app.ingest.printing_tags import TagKind, default_registry, load_registry
 from app.models import Card, CardVariant, Set
 from sqlalchemy import select
@@ -225,3 +225,80 @@ def test_derive_variants_keeps_the_first_product_on_a_collision(db):
     _derive_variants(db, set_row, products, prices)
     db.commit()
     assert _variants(db, vivillon.id) == {"holofoil": (1, False, True)}
+
+
+# --- editions: WotC subTypes and the Base Set (Shadowless) group --------------------------------
+
+
+def test_registry_lists_base_set_shadowless_as_an_edition_group():
+    group = REGISTRY.edition_groups[1663]
+    assert group.ptcg_set_id == "base1"
+    assert group.subtypes["Unlimited"] == "shadowless_normal"
+    assert group.subtypes["1st Edition Holofoil"] == "first_edition_holofoil"
+
+
+def test_loader_rejects_an_edition_group_mapping_to_an_unknown_variant(tmp_path):
+    path = _write(
+        tmp_path,
+        "edition_groups:\n  - {group: 1, set: base1, subtypes: {Unlimited: shadowy}}\n",
+    )
+    with pytest.raises(ValueError, match="unknown"):
+        load_registry(path)
+
+
+def test_derive_variants_reads_wotc_edition_subtypes(db):
+    """Jungle-era products price "1st Edition" / "Unlimited"; the unlimited copy is canonical."""
+    set_row = Set(ptcg_set_id="base2", name="Jungle")
+    db.add(set_row)
+    db.flush()
+    eevee = Card(ptcg_card_id="base2-51", set_id=set_row.id, number="51", name="Eevee")
+    scyther = Card(ptcg_card_id="base2-10", set_id=set_row.id, number="10", name="Scyther")
+    db.add_all([eevee, scyther])
+    db.flush()
+    products = [_product(1, "51/64", "Eevee"), _product(2, "10/64", "Scyther")]
+    prices = {
+        1: [_price(1, "1st Edition"), _price(1, "Unlimited")],
+        2: [_price(2, "1st Edition Holofoil"), _price(2, "Unlimited Holofoil")],
+    }
+    _derive_variants(db, set_row, products, prices)
+    db.commit()
+    assert _variants(db, eevee.id) == {
+        "first_edition_normal": (1, False, False),
+        "unlimited_normal": (1, False, True),
+    }
+    assert _variants(db, scyther.id) == {
+        "first_edition_holofoil": (2, False, False),
+        "unlimited_holofoil": (2, False, True),
+    }
+
+
+def test_edition_group_adds_shadowless_and_first_edition_without_moving_canonical(db):
+    set_row = Set(ptcg_set_id="base1", name="Base")
+    db.add(set_row)
+    db.flush()
+    charizard = Card(ptcg_card_id="base1-4", set_id=set_row.id, number="4", name="Charizard")
+    db.add(charizard)
+    db.flush()
+    # Primary group 604: the unlimited print with the shadow.
+    _derive_variants(db, set_row, [_product(1, "4/102", "Charizard")], {1: [_price(1, "Holofoil")]})
+    # Group 1663, Base Set (Shadowless).
+    _derive_variants(
+        db,
+        set_row,
+        [_product(2, "004/102", "Charizard")],
+        {2: [_price(2, "1st Edition Holofoil"), _price(2, "Unlimited Holofoil")]},
+        REGISTRY.edition_groups[1663],
+    )
+    db.commit()
+    assert _variants(db, charizard.id) == {
+        "holofoil": (1, False, True),
+        "first_edition_holofoil": (2, False, False),
+        "shadowless_holofoil": (2, False, False),
+    }
+
+
+def test_set_only_ingest_includes_the_sets_edition_groups(db):
+    db.add(Set(ptcg_set_id="base1", name="Base", tcgplayer_group_id=604))
+    db.flush()
+    pairs = resolve_group_set_pairs(db, None, ["base1"], lambda: [])
+    assert pairs == [(604, "base1"), (1663, None)]
